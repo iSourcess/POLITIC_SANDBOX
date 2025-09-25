@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLITIC-SANDBOX - Dashboard</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header Navigation -->
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo">
+                    <svg viewBox="0 0 24 24" width="32" height="32">
+                        <img src="images/logo.svg" alt="Politic Sandbox Logo" class="logo">
+                    </svg>
+                    <span>POLITIC-SANDBOX</span>
+                </div>
+            </div>
+            
+            <div class="nav-menu">
+                <a href="#debates" class="nav-link active">Debates</a>
+                <a href="#encuestas" class="nav-link">Encuestas</a>
+                <a href="#estudiantes" class="nav-link">Estudiantes</a>
+                <a href="#perfil" class="nav-link">Mi Perfil</a>
+            </div>
+            
+            <div class="nav-actions">
+                <button class="theme-toggle" id="themeToggle">
+                    <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="moon-icon" viewBox="0 0 24 24" width="20" height="20">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+                
+                <div class="user-menu">
+                    <div class="user-avatar">
+                        <img src="https://via.placeholder.com/40" alt="Usuario" id="userAvatar">
+                    </div>
+                    <div class="dropdown-menu" id="userDropdown">
+                        <a href="#perfil">Mi Perfil</a>
+                        <a href="#configuracion">Configuración</a>
+                        <hr>
+                        <a href="#logout">Cerrar Sesión</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Hero Section -->
+            <section class="hero">
+                <h1>Bienvenido a tu espacio político estudiantil</h1>
+                <p>Participa en debates, crea encuestas y conecta con estudiantes de tu universidad</p>
+                <div class="hero-actions">
+                    <button class="btn btn-primary" onclick="openNewPostModal()">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        Nueva Publicación
+                    </button>
+                    <button class="btn btn-secondary" onclick="openNewPollModal()">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                        Crear Encuesta
+                    </button>
+                </div>
+            </section>
+
+            <!-- Stats Cards -->
+            <section class="stats-section">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon debates">🎯</div>
+                        <div class="stat-content">
+                            <h3 id="debatesCount">24</h3>
+                            <p>Debates Activos</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon polls">📊</div>
+                        <div class="stat-content">
+                            <h3 id="pollsCount">12</h3>
+                            <p>Encuestas Activas</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon students">👥</div>
+                        <div class="stat-content">
+                            <h3 id="studentsCount">156</h3>
+                            <p>Estudiantes Conectados</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon engagement">💬</div>
+                        <div class="stat-content">
+                            <h3 id="engagementCount">89%</h3>
+                            <p>Participación</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Content Sections -->
+            <div class="content-sections">
+                <!-- Sidebar -->
+                <aside class="sidebar">
+                    <div class="sidebar-section">
+                        <h3>Temas Populares</h3>
+                        <div class="topic-tags">
+                            <span class="topic-tag">#Becas</span>
+                            <span class="topic-tag">#Infraestructura</span>
+                            <span class="topic-tag">#Deporte</span>
+                            <span class="topic-tag">#Cultura</span>
+                            <span class="topic-tag">#Académico</span>
+                        </div>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <h3>Estudiantes Activos</h3>
+                        <div class="active-users" id="activeUsers">
+                            <!-- Se llenará dinámicamente -->
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Main Feed -->
+                <section class="main-feed">
+                    <div class="feed-header">
+                        <h2>Feed Principal</h2>
+                        <div class="filter-tabs">
+                            <button class="filter-tab active" data-filter="all">Todo</button>
+                            <button class="filter-tab" data-filter="debates">Debates</button>
+                            <button class="filter-tab" data-filter="polls">Encuestas</button>
+                            <button class="filter-tab" data-filter="announcements">Anuncios</button>
+                        </div>
+                    </div>
+                    
+                    <div class="posts-container" id="postsContainer">
+                        <!-- Posts se cargarán dinámicamente -->
+                    </div>
+                    
+                    <div class="load-more">
+                        <button class="btn btn-outline" id="loadMoreBtn">Cargar más publicaciones</button>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <!-- New Post Modal -->
+    <div class="modal" id="newPostModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nueva Publicación</h3>
+                <button class="modal-close" onclick="closeModal('newPostModal')">&times;</button>
+            </div>
+            <form class="modal-body" id="newPostForm">
+                <div class="form-group">
+                    <label for="postTitle">Título</label>
+                    <input type="text" id="postTitle" name="title" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="postCategory">Categoría</label>
+                    <select id="postCategory" name="category" required>
+                        <option value="">Seleccionar categoría</option>
+                        <option value="debate">Debate</option>
+                        <option value="announcement">Anuncio</option>
+                        <option value="question">Pregunta</option>
+                        <option value="proposal">Propuesta</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="postContent">Contenido</label>
+                    <textarea id="postContent" name="content" rows="6" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="postTags">Etiquetas (separadas por comas)</label>
+                    <input type="text" id="postTags" name="tags" placeholder="ej: becas, infraestructura, deporte">
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('newPostModal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Publicar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Poll Modal -->
+    <div class="modal" id="newPollModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Crear Encuesta</h3>
+                <button class="modal-close" onclick="closeModal('newPollModal')">&times;</button>
+            </div>
+            <form class="modal-body" id="newPollForm">
+                <div class="form-group">
+                    <label for="pollTitle">Título de la Encuesta</label>
+                    <input type="text" id="pollTitle" name="title" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="pollDescription">Descripción</label>
+                    <textarea id="pollDescription" name="description" rows="3"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Opciones</label>
+                    <div class="poll-options" id="pollOptions">
+                        <input type="text" name="option[]" placeholder="Opción 1" required>
+                        <input type="text" name="option[]" placeholder="Opción 2" required>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="addPollOption()">+ Agregar Opción</button>
+                </div>
+                
+                <div class="form-group">
+                    <label for="pollDuration">Duración (días)</label>
+                    <input type="number" id="pollDuration" name="duration" min="1" max="30" value="7">
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('newPollModal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear Encuesta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
