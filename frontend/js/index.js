@@ -12,7 +12,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const createDebateForm = document.getElementById('create-debate-form');
     const searchForm = document.querySelector('.search-bar');
     const searchInput = document.querySelector('.search-bar input');
+    const SUPABASE_URL = "https://kbcsmxpxiupjidpqiogk.supabase.co";
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiY3NteHB4aXVwamlkcHFpb2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0NjIzNjAsImV4cCI6MjA4NTAzODM2MH0.D2Yak5p_vDlbP9EXjhdKdlxMVS9lHqUv6vUk4FRpyrc';
     
+    // 1. Inicializa Supabase
+    const supabase = window.supabase.createClient(
+        'https://kbcsmxpxiupjidpqiogk.supabase.co',  // 👈 Tu Project URL
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiY3NteHB4aXVwamlkcHFpb2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0NjIzNjAsImV4cCI6MjA4NTAzODM2MH0.D2Yak5p_vDlbP9EXjhdKdlxMVS9lHqUv6vUk4FRpyrc'
+    );
+
+    // 2. Verifica que funciona
+    console.log('✅ Supabase inicializado:', supabase);
+
+    // 3. Prueba la conexión
+    supabase.auth.getSession().then(result => {
+        console.log('📊 Sesión:', result);
+    });
+
     // Verificar autenticación
     checkAuth();
     
