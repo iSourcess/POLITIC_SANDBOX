@@ -6,12 +6,17 @@ let activeUsers = [];
 let currentUser = null;
 
 // Configuración de la API
-const API_BASE_URL = 'http://127.0.0.1:3000/api/v1';
+const { createClient } = supabase;
+const supabaseClient = createClient(
+    'https://kbcsmxpxiupjidpqiogk.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiY3NteHB4aXVwamlkcHFpb2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0NjIzNjAsImV4cCI6MjA4NTAzODM2MH0.D2Yak5p_vDlbP9EXjhdKdlxMVS9lHqUv6vUk4FRpyrc'
+);
+
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
     initializeTheme();
-    initializeEventListeners();
+    initializeEventListeners();c
     checkAuthStatus();
 });
 
@@ -31,30 +36,20 @@ function toggleTheme() {
 
 // ===== AUTENTICACIÓN =====
 async function checkAuthStatus() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/auth/me`, {
-            method: 'GET',
-            credentials: 'include'
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            currentUser = result.data;
-            updateUserInterface();
-            loadDashboardData();
-        } else {
-            // Usuario no autenticado, redirigir a login
-            window.location.href = 'index.html';
-        }
-    } catch (error) {
-        console.error('Error verificando autenticación:', error);
-        showNotification('Error de conexión', 'error');
-        // Cargar datos mock como fallback
-        loadMockData();
-        renderPosts();
-        renderActiveUsers();
-        updateStats();
+    const { data } = await supabaseClient.auth.getSession();
+    
+    if (!data.session) {
+        window.location.href = 'index.html';
+        return;
     }
+
+    // Sesión válida, guardar usuario y cargar el dashboard
+    currentUser = data.session.user;
+    updateUserInterface();
+    loadMockData();
+    renderPosts();
+    renderActiveUsers();
+    updateStats();
 }
 
 function updateUserInterface() {
@@ -98,16 +93,20 @@ function initializeEventListeners() {
     });
 
     // Menú de usuario
-    const userAvatar = document.querySelector('.user-avatar');
-    const userDropdown = document.getElementById('userDropdown');
-    if (userAvatar && userDropdown) {
-        userAvatar.addEventListener('click', toggleUserDropdown);
-        document.addEventListener('click', (e) => {
-            if (!userAvatar.contains(e.target)) {
-                userDropdown.classList.remove('active');
-            }
-        });
-    }
+    // Menú de usuario
+const userAvatar = document.querySelector('.user-avatar');
+const userDropdown = document.getElementById('userDropdown');
+if (userAvatar && userDropdown) {
+    userAvatar.addEventListener('click', function(e) {
+        e.stopPropagation(); // evita que el click se propague al document
+        toggleUserDropdown();
+    });
+    document.addEventListener('click', (e) => {
+        if (!userAvatar.contains(e.target) && !userDropdown.contains(e.target)) {
+            userDropdown.classList.remove('active');
+        }
+    });
+}
 
     // Logout
     const logoutLink = document.querySelector('a[href="#logout"]');
@@ -165,23 +164,12 @@ function toggleUserDropdown() {
 }
 
 async function logout() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/auth/logout`, {
-            method: 'POST',
-            credentials: 'include'
-        });
-        
-        if (response.ok) {
-            window.location.href = 'index.html';
-        } else {
-            showNotification('Error cerrando sesión', 'error');
-        }
-    } catch (error) {
-        console.error('Error en logout:', error);
-        showNotification('Error cerrando sesión', 'error');
-    }
+    await supabaseClient.auth.signOut();
+    localStorage.removeItem('userData');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('rememberAuth');
+    window.location.href = 'index.html';
 }
-
 function setActiveFilter(filter) {
     currentFilter = filter;
     

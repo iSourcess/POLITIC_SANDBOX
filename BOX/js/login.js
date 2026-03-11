@@ -9,7 +9,11 @@ const messageContainer = document.getElementById('messageContainer');
 const tabButtons = document.querySelectorAll('.tab-btn');
 
 // API Base URL - cambiar por la URL de tu servidor Python
-const API_BASE_URL = 'http://localhost:3000/api/v1';
+const { createClient } = supabase;
+const supabaseClient = createClient(
+    'https://kbcsmxpxiupjidpqiogk.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiY3NteHB4aXVwamlkcHFpb2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0NjIzNjAsImV4cCI6MjA4NTAzODM2MH0.D2Yak5p_vDlbP9EXjhdKdlxMVS9lHqUv6vUk4FRpyrc'
+);
 
 // Inicialización cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', function() {
@@ -70,67 +74,47 @@ function updateFormDisplay() {
 // Manejar el inicio de sesión
 async function handleLogin(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(event.target);
     const email = formData.get('email');
     const password = formData.get('password');
     const rememberMe = document.getElementById('rememberMe').checked;
-    
-    // Validar formulario
-    if (!validateLoginForm(email, password)) {
-        return;
-    }
-    
+
+    if (!validateLoginForm(email, password)) return;
+
     showLoading();
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/login`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                email,
-                password,
-                remember_me: rememberMe
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            // Login exitoso
-            localStorage.setItem('authToken', data.token);
-            localStorage.setItem('userData', JSON.stringify(data.user));
-            
-            if (rememberMe) {
-                localStorage.setItem('rememberAuth', 'true');
-            }
-            
-            showMessage('Inicio de sesión exitoso. Redirigiendo...', 'success');
-            
-            // Redireccionar al dashboard después de 2 segundos
-            setTimeout(() => {
-                window.location.href = 'dashboard.html';
-            }, 2000);
-            
-        } else {
-            // Error en el login
-            handleLoginError(data);
+
+    // Supabase maneja la persistencia de sesión con persistSession
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password,
+        options: {
+            // Si rememberMe es false, la sesión dura solo mientras el navegador esté abierto
+            persistSession: rememberMe
         }
-        
-    } catch (error) {
-        console.error('Error en login:', error);
-        showMessage('Error de conexión. Por favor, intenta más tarde.', 'error');
+    });
+
+    if (error) {
+        showMessage('Correo o contraseña incorrectos.', 'error');
+    } else {
+        if (rememberMe) {
+            localStorage.setItem('rememberAuth', 'true');
+        } else {
+            localStorage.removeItem('rememberAuth');
+        }
+        showMessage('Inicio de sesión exitoso. Redirigiendo...', 'success');
+        setTimeout(() => {
+            window.location.href = 'dashboard.html';
+        }, 2000);
     }
-    
+
     hideLoading();
 }
 
 // Manejar el registro
 async function handleRegister(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(event.target);
     const userData = {
         name: formData.get('name'),
@@ -139,39 +123,33 @@ async function handleRegister(event) {
         confirmPassword: formData.get('confirmPassword'),
         university: formData.get('university')
     };
-    
-    // Validar formulario
-    if (!validateRegisterForm(userData)) {
-        return;
-    }
-    
+
+    if (!validateRegisterForm(userData)) return;
+
     showLoading();
-    
-    try {
-        // Simulación de registro exitoso (para desarrollo)
-        // En un entorno real, esto sería una llamada a la API
-        console.log('Datos de registro:', userData);
-        
-        // Simular un tiempo de procesamiento
+
+    const { data, error } = await supabaseClient.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+            data: {
+                full_name: userData.name,
+                university: userData.university
+            }
+        }
+    });
+
+    if (error) {
+        showMessage('Error al crear la cuenta: ' + error.message, 'error');
+    } else {
+        showMessage('Cuenta creada. Revisa tu correo para confirmarla.', 'success');
         setTimeout(() => {
-            // Registro exitoso
-            showMessage('Cuenta creada exitosamente. Por favor, inicia sesión.', 'success');
-            
-            // Cambiar a formulario de login
-            setTimeout(() => {
-                showLogin();
-                // Pre-llenar el email en el formulario de login
-                document.getElementById('loginEmail').value = userData.email;
-            }, 1000);
-            
-            hideLoading();
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Error en registro:', error);
-        showMessage('Error de conexión. Por favor, intenta más tarde.', 'error');
-        hideLoading();
+            showLogin();
+            document.getElementById('loginEmail').value = userData.email;
+        }, 2000);
     }
+
+    hideLoading();
 }
 
 // Validaciones
@@ -420,48 +398,46 @@ function showMessage(message, type = 'info') {
 }
 
 // Verificar estado de autenticación al cargar la página
-function checkAuthStatus() {
-    const token = localStorage.getItem('authToken');
-    const rememberAuth = localStorage.getItem('rememberAuth');
-    
-    if (token && rememberAuth === 'true') {
-        // Verificar si el token sigue siendo válido
-        validateToken(token);
+async function checkAuthStatus() {
+    const { data } = await supabaseClient.auth.getSession();
+    if (data.session) {
+        window.location.href = 'dashboard.html';
     }
 }
 
-async function validateToken(token) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/validate-token`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        
-        if (response.ok) {
-            // Token válido, redireccionar al dashboard
-            window.location.href = 'dashboard.html';
-        } else {
-            // Token inválido, limpiar storage
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('userData');
-            localStorage.removeItem('rememberAuth');
-        }
-    } catch (error) {
-        console.error('Error validating token:', error);
-        // En caso de error, limpiar storage por seguridad
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userData');
-        localStorage.removeItem('rememberAuth');
-    }
-}
 
 // Funciones para manejar la recuperación de contraseña
-function showForgotPassword() {
-    // Esta función se puede expandir para mostrar un modal de recuperación
-    showMessage('Funcionalidad de recuperación de contraseña próximamente disponible', 'info');
+async function showForgotPassword() {
+    const email = document.getElementById('loginEmail').value.trim();
+
+    // Si ya tiene un email escrito, lo usamos directamente
+    if (email && isValidEmail(email)) {
+        await sendPasswordReset(email);
+    } else {
+        // Pedir el email con un prompt simple
+        const inputEmail = prompt('Ingresa tu correo electrónico para recuperar tu contraseña:');
+        if (inputEmail && isValidEmail(inputEmail)) {
+            await sendPasswordReset(inputEmail);
+        } else if (inputEmail !== null) {
+            showMessage('Por favor ingresa un correo válido.', 'error');
+        }
+    }
+}
+
+async function sendPasswordReset(email) {
+    showLoading();
+
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/reset-password.html'
+    });
+
+    hideLoading();
+
+    if (error) {
+        showMessage('Error al enviar el correo. Intenta más tarde.', 'error');
+    } else {
+        showMessage(`Se envió un enlace de recuperación a ${email}. Revisa tu bandeja de entrada.`, 'success');
+    }
 }
 
 // Event listener para el enlace de "¿Olvidaste tu contraseña?"
