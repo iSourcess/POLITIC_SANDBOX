@@ -1,775 +1,714 @@
 // ===== VARIABLES GLOBALES =====
-let currentTheme = 'light';
 let currentFilter = 'all';
 let posts = [];
-let activeUsers = [];
 let currentUser = null;
+let searchDebounce = null;
 
-// Configuración de la API
+// Configuración de Supabase
 const { createClient } = supabase;
 const supabaseClient = createClient(
     'https://kbcsmxpxiupjidpqiogk.supabase.co',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiY3NteHB4aXVwamlkcHFpb2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0NjIzNjAsImV4cCI6MjA4NTAzODM2MH0.D2Yak5p_vDlbP9EXjhdKdlxMVS9lHqUv6vUk4FRpyrc'
 );
 
-
 // ===== INICIALIZACIÓN =====
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     initializeTheme();
-    initializeEventListeners();c
+    initializeEventListeners();
     checkAuthStatus();
 });
 
-// ===== GESTIÓN DE TEMA =====
+// ===== GESTIÓN DE TEMA (CON PERSISTENCIA) =====
 function initializeTheme() {
-    document.documentElement.setAttribute('data-theme', currentTheme);
+    const savedTheme = localStorage.getItem('politic-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
     const themeToggle = document.getElementById('themeToggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('click', toggleTheme);
-    }
+    if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
 }
 
 function toggleTheme() {
-    currentTheme = currentTheme === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', currentTheme);
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('politic-theme', next);
 }
 
 // ===== AUTENTICACIÓN =====
 async function checkAuthStatus() {
     const { data } = await supabaseClient.auth.getSession();
-    
-    if (!data.session) {
-        window.location.href = 'index.html';
-        return;
-    }
-
-    // Sesión válida, guardar usuario y cargar el dashboard
+    if (!data.session) { window.location.href = 'index.html'; return; }
     currentUser = data.session.user;
     updateUserInterface();
-    loadMockData();
-    renderPosts();
-    renderActiveUsers();
-    updateStats();
+    await Promise.all([loadPostsFromDB(), loadPopularTags()]);
 }
 
 function updateUserInterface() {
-    if (currentUser) {
-        // Actualizar avatar del usuario
-        const userAvatar = document.getElementById('userAvatar');
-        if (userAvatar) {
-            userAvatar.src = currentUser.avatar_url;
-        }
-        
-        // Actualizar nombre en el menú si existe
-        const userName = document.querySelector('.user-name');
-        if (userName) {
-            userName.textContent = currentUser.full_name;
-        }
-    }
-}
-
-async function loadDashboardData() {
-    try {
-        await Promise.all([
-            loadPosts(),
-            loadStats(),
-            loadActiveUsers()
-        ]);
-    } catch (error) {
-        console.error('Error cargando datos del dashboard:', error);
-        showNotification('Error cargando datos', 'error');
-    }
+    if (!currentUser) return;
+    const userAvatar = document.getElementById('userAvatar');
+    if (userAvatar && currentUser.user_metadata?.avatar_url)
+        userAvatar.src = currentUser.user_metadata.avatar_url;
 }
 
 // ===== EVENT LISTENERS =====
 function initializeEventListeners() {
-    // Navegación
-    const navLinks = document.querySelectorAll('.nav-link');
-    navLinks.forEach(link => {
+    document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            setActiveNavLink(link);
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            link.classList.add('active');
         });
     });
 
-    // Menú de usuario
-    // Menú de usuario
-const userAvatar = document.querySelector('.user-avatar');
-const userDropdown = document.getElementById('userDropdown');
-if (userAvatar && userDropdown) {
-    userAvatar.addEventListener('click', function(e) {
-        e.stopPropagation(); // evita que el click se propague al document
-        toggleUserDropdown();
-    });
-    document.addEventListener('click', (e) => {
-        if (!userAvatar.contains(e.target) && !userDropdown.contains(e.target)) {
-            userDropdown.classList.remove('active');
-        }
-    });
-}
+    const userAvatar = document.querySelector('.user-avatar');
+    const userDropdown = document.getElementById('userDropdown');
+    if (userAvatar && userDropdown) {
+        userAvatar.addEventListener('click', (e) => { e.stopPropagation(); userDropdown.classList.toggle('active'); });
+        document.addEventListener('click', (e) => {
+            if (!userAvatar.contains(e.target) && !userDropdown.contains(e.target))
+                userDropdown.classList.remove('active');
+        });
+    }
 
-    // Logout
     const logoutLink = document.querySelector('a[href="#logout"]');
-    if (logoutLink) {
-        logoutLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            logout();
-        });
-    }
+    if (logoutLink) logoutLink.addEventListener('click', (e) => { e.preventDefault(); logout(); });
 
-    // Filtros de posts
-    const filterTabs = document.querySelectorAll('.filter-tab');
-    filterTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            setActiveFilter(tab.dataset.filter);
-        });
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.addEventListener('click', () => setActiveFilter(tab.dataset.filter));
     });
 
-    // Formularios
     const newPostForm = document.getElementById('newPostForm');
+    if (newPostForm) newPostForm.addEventListener('submit', handleNewDebate);
+
     const newPollForm = document.getElementById('newPollForm');
-    
-    if (newPostForm) {
-        newPostForm.addEventListener('submit', handleNewPost);
-    }
-    
-    if (newPollForm) {
-        newPollForm.addEventListener('submit', handleNewPoll);
-    }
+    if (newPollForm) newPollForm.addEventListener('submit', handleNewPoll);
 
-    // Cargar más posts
     const loadMoreBtn = document.getElementById('loadMoreBtn');
-    if (loadMoreBtn) {
-        loadMoreBtn.addEventListener('click', loadMorePosts);
-    }
+    if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMorePosts);
 
-    // Cerrar modales al hacer clic fuera
     document.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal')) {
-            closeModal(e.target.id);
-        }
+        if (e.target.classList.contains('modal')) closeModal(e.target.id);
     });
-}
 
-function setActiveNavLink(activeLink) {
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.classList.remove('active');
-    });
-    activeLink.classList.add('active');
-}
-
-function toggleUserDropdown() {
-    const dropdown = document.getElementById('userDropdown');
-    dropdown.classList.toggle('active');
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => handleSearch(e.target.value), 350);
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-bar'))
+                document.getElementById('searchResults').classList.remove('show');
+        });
+    }
 }
 
 async function logout() {
     await supabaseClient.auth.signOut();
     localStorage.removeItem('userData');
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('rememberAuth');
     window.location.href = 'index.html';
 }
+
 function setActiveFilter(filter) {
     currentFilter = filter;
-    
-    // Actualizar tabs activos
-    document.querySelectorAll('.filter-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
+    document.querySelectorAll('.filter-tab').forEach(tab => tab.classList.remove('active'));
     document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
-    
-    // Filtrar posts
     renderPosts();
 }
 
-// ===== GESTIÓN DE MODALES =====
-function openModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
+// ===== BUSCADOR (tablas: debates + polls) =====
+async function handleSearch(query) {
+    const searchResults = document.getElementById('searchResults');
+    if (!query || query.trim().length < 2) { searchResults.classList.remove('show'); return; }
+
+    try {
+        const q = query.trim();
+        const { data: debateResults } = await supabaseClient
+            .from('debates').select('id, title, category, created_at')
+            .ilike('title', `%${q}%`).eq('is_deleted', false).limit(5);
+
+        const { data: pollResults } = await supabaseClient
+            .from('polls').select('id, title, created_at')
+            .ilike('title', `%${q}%`).limit(3);
+
+        const combined = [
+            ...(debateResults || []).map(p => ({ ...p, type: 'debate' })),
+            ...(pollResults || []).map(p => ({ ...p, type: 'poll', category: 'poll' }))
+        ];
+
+        if (combined.length === 0) {
+            searchResults.innerHTML = '<div class="search-no-results">Sin resultados para tu búsqueda</div>';
+        } else {
+            searchResults.innerHTML = combined.map(item => `
+                <div class="search-result-item" onclick="scrollToPost('${item.type}-${item.id}')">
+                    <span class="result-badge">${getCategoryLabel(item.category)}</span>
+                    <div class="result-title">${item.title}</div>
+                    <div class="result-meta">${getTimeAgo(item.created_at)}</div>
+                </div>`).join('');
+        }
+        searchResults.classList.add('show');
+    } catch (err) { console.error('Error buscando:', err); }
+}
+
+function scrollToPost(elementId) {
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.outline = '2px solid var(--primary-purple)';
+        setTimeout(() => el.style.outline = '', 2000);
+    }
+    document.getElementById('searchResults').classList.remove('show');
+    document.getElementById('searchInput').value = '';
+}
+
+// ===== TEMAS POPULARES (tabla: debates, columna: tags, últimas 24h) =====
+async function loadPopularTags() {
+    const tagsContainer = document.getElementById('popularTags');
+    if (!tagsContainer) return;
+    try {
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabaseClient
+            .from('debates').select('tags').gte('created_at', since).eq('is_deleted', false);
+        if (error) throw error;
+
+        const tagCount = {};
+        (data || []).forEach(row => {
+            // tags es text[] — Supabase lo devuelve como array de JS
+            const tagList = Array.isArray(row.tags) ? row.tags : [];
+            tagList.forEach(tag => {
+                const t = tag.trim().toLowerCase();
+                if (t) tagCount[t] = (tagCount[t] || 0) + 1;
+            });
+        });
+
+        const sorted = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        tagsContainer.innerHTML = sorted.length === 0
+            ? '<span class="topic-tag" style="opacity:0.5">Sin actividad reciente</span>'
+            : sorted.map(([tag, count]) =>
+                `<span class="topic-tag" title="${count} usos hoy" onclick="filterByTag('${tag}')">#${tag}</span>`
+              ).join('');
+    } catch (err) {
+        console.error('Error cargando tags:', err);
+        document.getElementById('popularTags').innerHTML = '<span class="topic-tag loading-tag">Sin datos aún</span>';
     }
 }
 
+function filterByTag(tag) {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) { searchInput.value = tag; handleSearch(tag); }
+}
+
+// ===== CARGA DE POSTS DESDE SUPABASE =====
+// Tablas reales: debates, debate_votes, polls, poll_options, poll_votes, profiles
+async function loadPostsFromDB() {
+    const postsContainer = document.getElementById('postsContainer');
+    postsContainer.innerHTML = `
+        <div class="loading-posts">
+            <div class="loading-spinner"></div>
+            <p>Cargando publicaciones...</p>
+        </div>`;
+
+    try {
+        // --- Debates ---
+        const { data: debateData, error: debateError } = await supabaseClient
+            .from('debates')
+            .select(`
+                id, title, category, content, tags, created_at,
+                upvotes_count, downvotes_count, comments_count, user_id,
+                profiles:user_id (full_name, avatar_url)
+            `)
+            .eq('is_deleted', false)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (debateError) {
+            // Si falla con el join de profiles, intentar sin él
+            console.warn('Error con join profiles, intentando sin join:', debateError.message);
+            const { data: debateDataSimple, error: debateErrorSimple } = await supabaseClient
+                .from('debates')
+                .select('id, title, category, content, tags, created_at, upvotes_count, downvotes_count, comments_count, user_id')
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: false })
+                .limit(20);
+            if (debateErrorSimple) throw debateErrorSimple;
+            // Usar datos sin perfil
+            posts = (debateDataSimple || []).map(d => ({
+                id: d.id, type: 'debate', category: d.category || 'general',
+                title: d.title, content: d.content,
+                tags: Array.isArray(d.tags) ? d.tags : [],
+                author: 'Estudiante', avatar: 'https://via.placeholder.com/40',
+                timestamp: d.created_at,
+                likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
+                liked: false, disliked: false
+            }));
+            renderPosts();
+            return;
+        }
+
+        // --- Encuestas ---
+        const { data: pollData, error: pollError } = await supabaseClient
+            .from('polls')
+            .select(`
+                id, title, description, created_at, expires_at, total_votes, comments_count,
+                profiles:user_id (full_name, avatar_url),
+                poll_options (id, option_text, votes_count)
+            `)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        if (pollError) throw pollError;
+
+        const debatesFormatted = (debateData || []).map(d => ({
+            id: d.id, type: 'debate', category: d.category || 'general',
+            title: d.title, content: d.content,
+            // tags es text[] — Supabase lo devuelve ya como array de JS
+            tags: Array.isArray(d.tags) ? d.tags : [],
+            author: d.profiles?.full_name || 'Estudiante',
+            avatar: d.profiles?.avatar_url || 'https://via.placeholder.com/40',
+            timestamp: d.created_at,
+            likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
+            liked: false, disliked: false
+        }));
+
+        const pollsFormatted = (pollData || []).map(p => {
+            const options = (p.poll_options || []).map(opt => ({
+                id: opt.id, text: opt.option_text, votes: opt.votes_count || 0,
+                percentage: p.total_votes > 0 ? Math.round((opt.votes_count / p.total_votes) * 100) : 0
+            }));
+            return {
+                id: p.id, poll_id: p.id, type: 'poll', category: 'poll',
+                title: p.title, description: p.description,
+                author: p.profiles?.full_name || 'Estudiante',
+                avatar: p.profiles?.avatar_url || 'https://via.placeholder.com/40',
+                timestamp: p.created_at, options,
+                totalVotes: p.total_votes || 0,
+                isExpired: p.expires_at ? new Date(p.expires_at) < new Date() : false,
+                userVoted: false, likes: 0, comments: p.comments_count || 0
+            };
+        });
+
+        posts = [...debatesFormatted, ...pollsFormatted]
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Verificar votos del usuario actual
+        if (currentUser) {
+            const { data: myVotes } = await supabaseClient
+                .from('debate_votes').select('debate_id, vote_type').eq('user_id', currentUser.id);
+            (myVotes || []).forEach(v => {
+                const post = posts.find(p => p.id === v.debate_id);
+                if (post) { post.liked = v.vote_type === 'upvote'; post.disliked = v.vote_type === 'downvote'; }
+            });
+
+            const { data: myPollVotes } = await supabaseClient
+                .from('poll_votes').select('poll_id').eq('user_id', currentUser.id);
+            const votedIds = new Set((myPollVotes || []).map(v => v.poll_id));
+            posts.forEach(p => { if (p.type === 'poll' && votedIds.has(p.poll_id)) p.userVoted = true; });
+        }
+
+        renderPosts();
+    } catch (err) {
+        console.error('Error cargando datos:', err);
+        postsContainer.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <p>Error al cargar publicaciones</p>
+                <small style="color:var(--text-light);font-size:0.75rem;margin-top:0.5rem;display:block">${err.message}</small>
+            </div>`;
+    }
+}
+
+// ===== MODALES =====
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) { modal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+}
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
         modal.classList.remove('active');
         document.body.style.overflow = 'auto';
-        
-        // Limpiar formularios
         const form = modal.querySelector('form');
-        if (form) {
-            form.reset();
-        }
+        if (form) form.reset();
     }
 }
-
 function openNewPostModal() {
     openModal('newPostModal');
+    loadCategoryOptions();
 }
 
-function openNewPollModal() {
-    openModal('newPollModal');
-}
+async function loadCategoryOptions() {
+    const select = document.getElementById('postCategory');
+    if (!select) return;
 
-// ===== CARGA DE DATOS DESDE API =====
-
-async function loadPosts() {
+    // Leer categorías únicas que ya existen en la BD
     try {
-        const response = await fetch(`${API_BASE_URL}/posts`, {
-            credentials: 'include'
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            posts = result.data.posts;
-            renderPosts();
-        } else {
-            throw new Error('Error cargando posts');
+        const { data } = await supabaseClient
+            .from('debates')
+            .select('category')
+            .eq('is_deleted', false)
+            .limit(200);
+
+        if (data && data.length > 0) {
+            const existing = [...new Set(data.map(d => d.category).filter(Boolean))].sort();
+            populateCategorySelect(select, existing);
+            return;
         }
-    } catch (error) {
-        console.error('Error cargando posts:', error);
-        showNotification('Error cargando publicaciones', 'error');
-    }
+    } catch (e) { /* continuar */ }
+
+    // Valores exactos del CHECK constraint valid_category en la BD
+    populateCategorySelect(select, ['elecciones', 'reformas', 'movimientos', 'general']);
 }
 
-async function loadStats() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/stats`, {
-            credentials: 'include'
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            updateStatsDisplay(result.data.stats);
-            activeUsers = result.data.active_users;
-            renderActiveUsers();
-            renderPopularTags(result.data.popular_tags);
-        } else {
-            throw new Error('Error cargando estadísticas');
-        }
-    } catch (error) {
-        console.error('Error cargando estadísticas:', error);
-        showNotification('Error cargando estadísticas', 'error');
-    }
-}
-
-function updateStatsDisplay(stats) {
-    const debatesElement = document.getElementById('debatesCount');
-    const pollsElement = document.getElementById('pollsCount');
-    const studentsElement = document.getElementById('studentsCount');
-    const engagementElement = document.getElementById('engagementCount');
-    
-    if (debatesElement) debatesElement.textContent = stats.debates_count;
-    if (pollsElement) pollsElement.textContent = stats.polls_count;
-    if (studentsElement) studentsElement.textContent = stats.students_count;
-    if (engagementElement) engagementElement.textContent = `${stats.engagement}%`;
-}
-
-function renderPopularTags(tags) {
-    const tagsContainer = document.querySelector('.topic-tags');
-    if (tagsContainer && tags) {
-        tagsContainer.innerHTML = tags.map(tag => 
-            `<span class="topic-tag">#${tag.tag}</span>`
-        ).join('');
-    }
-}
-
-// ===== GESTIÓN DE POSTS =====
-async function handleNewPost(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    const postData = {
-        title: formData.get('title'),
-        category: formData.get('category'),
-        content: formData.get('content'),
-        tags: formData.get('tags').split(',').map(tag => tag.trim()).filter(tag => tag)
+function populateCategorySelect(select, categories) {
+    const labels = {
+        elecciones: '🗳️ Elecciones',
+        reformas:   '📋 Reformas',
+        movimientos:'✊ Movimientos',
+        general:    '💬 General'
     };
-    
+    select.innerHTML = '<option value="">Seleccionar categoría</option>';
+    categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = labels[cat] || (cat.charAt(0).toUpperCase() + cat.slice(1));
+        select.appendChild(opt);
+    });
+}
+function openNewPollModal() { openModal('newPollModal'); }
+
+// ===== CREAR DEBATE (tabla: debates) =====
+async function handleNewDebate(e) {
+    e.preventDefault();
+    const submitBtn = e.target.querySelector('[type="submit"]');
+    submitBtn.disabled = true; submitBtn.textContent = 'Publicando...';
+
+    const formData = new FormData(e.target);
+    // tags es text[] en la BD — enviar como array de JS
+    const tags = (formData.get('tags') || '')
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean);
+
     try {
-        const response = await fetch(`${API_BASE_URL}/posts`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'include',
-            body: JSON.stringify(postData)
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            closeModal('newPostModal');
-            showNotification('Publicación creada exitosamente', 'success');
-            loadPosts(); // Recargar posts
-        } else {
-            showNotification(result.message || 'Error creando publicación', 'error');
+        const { error } = await supabaseClient.from('debates').insert([{
+            user_id: currentUser.id,
+            title: formData.get('title'),
+            category: formData.get('category'),
+            content: formData.get('content'),
+            tags,                    // text[] — array de JS se convierte automáticamente
+            upvotes_count: 0,
+            downvotes_count: 0,
+            comments_count: 0,
+            views_count: 0,
+            is_active: true,
+            is_pinned: false,
+            is_deleted: false
+        }]);
+
+        if (error) {
+            // Si el error es de constraint de categoría, mostrar mensaje útil
+            if (error.message.includes('valid_category')) {
+                showNotification(
+                    'Categoría inválida. Intenta con: general, political, social, economic, cultural o educational',
+                    'error'
+                );
+            } else {
+                throw error;
+            }
+            return;
         }
-    } catch (error) {
-        console.error('Error creando post:', error);
-        showNotification('Error de conexión', 'error');
+
+        closeModal('newPostModal');
+        showNotification('Publicación creada exitosamente ✓', 'success');
+        await loadPostsFromDB();
+        await loadPopularTags();
+    } catch (err) {
+        console.error('Error creando debate:', err);
+        showNotification('Error: ' + err.message, 'error');
+    } finally {
+        submitBtn.disabled = false; submitBtn.textContent = 'Publicar';
     }
 }
 
+// ===== CREAR ENCUESTA (tablas: polls + poll_options) =====
 async function handleNewPoll(e) {
     e.preventDefault();
-    
+    const submitBtn = e.target.querySelector('[type="submit"]');
+    submitBtn.disabled = true; submitBtn.textContent = 'Creando...';
+
     const formData = new FormData(e.target);
-    const options = Array.from(formData.getAll('option[]')).filter(option => option.trim());
-    
-    const pollData = {
-        title: formData.get('title'),
-        description: formData.get('description'),
-        options: options,
-        duration: parseInt(formData.get('duration')),
-        tags: formData.get('tags') ? formData.get('tags').split(',').map(tag => tag.trim()).filter(tag => tag) : []
-    };
-    
+    const options = Array.from(formData.getAll('option[]')).filter(o => o.trim());
+    const duration = parseInt(formData.get('duration')) || 7;
+    const expiresAt = new Date(Date.now() + duration * 24 * 60 * 60 * 1000).toISOString();
+
     try {
-        const response = await fetch(`${API_BASE_URL}/polls`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'include',
-            body: JSON.stringify(pollData)
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            closeModal('newPollModal');
-            showNotification('Encuesta creada exitosamente', 'success');
-            loadPosts(); // Recargar posts
-        } else {
-            showNotification(result.message || 'Error creando encuesta', 'error');
-        }
-    } catch (error) {
-        console.error('Error creando encuesta:', error);
-        showNotification('Error de conexión', 'error');
+        const { data: poll, error: pollError } = await supabaseClient.from('polls').insert([{
+            user_id: currentUser.id,
+            title: formData.get('title'),
+            description: formData.get('description'),
+            expires_at: expiresAt,
+            total_votes: 0,
+            comments_count: 0
+        }]).select().single();
+        if (pollError) throw pollError;
+
+        // Columna real en tu BD: option_text
+        const { error: optError } = await supabaseClient.from('poll_options').insert(
+            options.map(text => ({ poll_id: poll.id, option_text: text, votes_count: 0 }))
+        );
+        if (optError) throw optError;
+
+        closeModal('newPollModal');
+        showNotification('Encuesta creada exitosamente', 'success');
+        await loadPostsFromDB();
+    } catch (err) {
+        showNotification('Error al crear la encuesta: ' + err.message, 'error');
+    } finally {
+        submitBtn.disabled = false; submitBtn.textContent = 'Crear Encuesta';
     }
 }
 
 function addPollOption() {
     const pollOptions = document.getElementById('pollOptions');
-    const optionCount = pollOptions.children.length;
-    
-    if (optionCount < 10) { // Máximo 10 opciones
-        const newInput = document.createElement('input');
-        newInput.type = 'text';
-        newInput.name = 'option[]';
-        newInput.placeholder = `Opción ${optionCount + 1}`;
-        newInput.required = true;
-        
-        pollOptions.appendChild(newInput);
+    if (pollOptions.children.length < 10) {
+        const input = document.createElement('input');
+        input.type = 'text'; input.name = 'option[]';
+        input.placeholder = `Opción ${pollOptions.children.length + 1}`;
+        input.required = true;
+        pollOptions.appendChild(input);
     }
 }
 
+// ===== RENDER =====
 function renderPosts() {
     const postsContainer = document.getElementById('postsContainer');
     if (!postsContainer) return;
-    
-    let filteredPosts = posts;
-    
-    // Aplicar filtros
-    if (currentFilter !== 'all') {
-        filteredPosts = posts.filter(post => {
-            if (currentFilter === 'debates') return post.category === 'debate';
-            if (currentFilter === 'polls') return post.type === 'poll';
-            if (currentFilter === 'announcements') return post.category === 'announcement';
-            return true;
-        });
-    }
-    
-    postsContainer.innerHTML = '';
-    
-    filteredPosts.forEach(post => {
-        const postElement = createPostElement(post);
-        postsContainer.appendChild(postElement);
+
+    let filtered = currentFilter === 'all' ? posts : posts.filter(post => {
+        if (currentFilter === 'debates') return post.type === 'debate';
+        if (currentFilter === 'polls') return post.type === 'poll';
+        if (currentFilter === 'announcements') return post.category === 'announcement';
+        return true;
     });
-    
-    if (filteredPosts.length === 0) {
-        postsContainer.innerHTML = '<div class="text-center" style="padding: 2rem;">No hay publicaciones que mostrar</div>';
+
+    if (filtered.length === 0) {
+        postsContainer.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <p>No hay publicaciones que mostrar</p>
+            </div>`;
+        return;
     }
+
+    postsContainer.innerHTML = '';
+    filtered.forEach(post => {
+        const el = document.createElement('div');
+        el.className = 'post-card fade-in';
+        el.id = `${post.type}-${post.id}`;
+        el.innerHTML = post.type === 'poll' ? createPollHTML(post) : createDebateHTML(post);
+        postsContainer.appendChild(el);
+    });
 }
 
-function createPostElement(post) {
-    const postDiv = document.createElement('div');
-    postDiv.className = 'post-card fade-in';
-    
-    if (post.type === 'poll') {
-        postDiv.innerHTML = createPollHTML(post);
-    } else {
-        postDiv.innerHTML = createPostHTML(post);
-    }
-    
-    return postDiv;
-}
-
-function createPostHTML(post) {
-    const timeAgo = getTimeAgo(post.timestamp);
-    const tagsHTML = post.tags.map(tag => `<span class="post-tag">#${tag}</span>`).join('');
-    const likeClass = post.liked ? 'liked' : '';
-    
+function createDebateHTML(post) {
+    const tagsHTML = (post.tags || []).map(tag => `<span class="post-tag">#${tag}</span>`).join('');
     return `
         <div class="post-header">
             <img src="${post.avatar}" alt="${post.author}" class="post-avatar">
             <div class="post-meta">
                 <div class="post-author">${post.author}</div>
-                <div class="post-time">${timeAgo}</div>
+                <div class="post-time">${getTimeAgo(post.timestamp)}</div>
             </div>
             <span class="post-category ${post.category}">${getCategoryLabel(post.category)}</span>
         </div>
         <h3 class="post-title">${post.title}</h3>
         <div class="post-content">${post.content}</div>
-        ${post.tags.length > 0 ? `<div class="post-tags">${tagsHTML}</div>` : ''}
+        ${post.tags?.length ? `<div class="post-tags">${tagsHTML}</div>` : ''}
         <div class="post-actions">
-            <div class="post-action ${likeClass}" onclick="toggleLike(${post.id})">
-                <svg viewBox="0 0 24 24">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
+            <div class="post-action ${post.liked ? 'liked' : ''}" onclick="voteDebate('${post.id}', 'upvote')">
+                <svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
                 <span>${post.likes}</span>
             </div>
-            <div class="post-action" onclick="openCommentsModal(${post.id})">
-                <svg viewBox="0 0 24 24">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-                </svg>
+            <div class="post-action ${post.disliked ? 'disliked' : ''}" onclick="voteDebate('${post.id}', 'downvote')">
+                <svg viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+                <span>${post.dislikes}</span>
+            </div>
+            <div class="post-action" onclick="openCommentsModal('${post.id}')">
+                <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                 <span>${post.comments}</span>
             </div>
-            <div class="post-action" onclick="sharePost(${post.id})">
-                <svg viewBox="0 0 24 24">
-                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                    <polyline points="16,6 12,2 8,6"/>
-                    <line x1="12" y1="2" x2="12" y2="15"/>
-                </svg>
-                <span>${post.shares}</span>
+            <div class="post-action" onclick="sharePost('${post.id}')">
+                <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16,6 12,2 8,6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                Compartir
             </div>
-        </div>
-    `;
+        </div>`;
 }
 
 function createPollHTML(poll) {
-    const timeAgo = getTimeAgo(poll.timestamp);
-    
-    let optionsHTML = '';
-    if (poll.userVoted || poll.isExpired) {
-        // Mostrar resultados
-        optionsHTML = poll.options.map((option, index) => `
+    let optionsHTML = (poll.userVoted || poll.isExpired)
+        ? poll.options.map(opt => `
             <div class="poll-option voted">
-                <span>${option.text}</span>
-                <div class="poll-results">${option.percentage}% (${option.votes} votos)</div>
-                <div class="poll-progress" style="width: ${option.percentage}%"></div>
-            </div>
-        `).join('');
-    } else {
-        // Mostrar opciones para votar
-        optionsHTML = poll.options.map((option, index) => `
-            <div class="poll-option" onclick="voteInPoll(${poll.poll_id}, ${index})">
+                <span>${opt.text}</span>
+                <div class="poll-results">${opt.percentage}% (${opt.votes} votos)</div>
+                <div class="poll-progress" style="width: ${opt.percentage}%"></div>
+            </div>`).join('')
+        : poll.options.map(opt => `
+            <div class="poll-option" onclick="voteInPoll('${poll.poll_id}', '${opt.id}')">
                 <input type="radio" name="poll_${poll.poll_id}">
-                <span>${option.text}</span>
-            </div>
-        `).join('');
-    }
-    
+                <span>${opt.text}</span>
+            </div>`).join('');
+
     return `
         <div class="post-header">
             <img src="${poll.avatar}" alt="${poll.author}" class="post-avatar">
             <div class="post-meta">
                 <div class="post-author">${poll.author}</div>
-                <div class="post-time">${timeAgo}</div>
+                <div class="post-time">${getTimeAgo(poll.timestamp)}</div>
             </div>
             <span class="post-category poll">Encuesta</span>
         </div>
         <h3 class="post-title">${poll.title}</h3>
         ${poll.description ? `<div class="post-content">${poll.description}</div>` : ''}
-        <div class="poll-options">
-            ${optionsHTML}
-        </div>
-        ${poll.userVoted || poll.isExpired ? `<div class="poll-results">Total de votos: ${poll.totalVotes}</div>` : ''}
+        <div class="poll-options">${optionsHTML}</div>
+        ${poll.userVoted || poll.isExpired ? `<div class="poll-results" style="margin-top:0.5rem">Total: ${poll.totalVotes} votos</div>` : ''}
         ${poll.isExpired ? '<div class="poll-expired">Encuesta finalizada</div>' : ''}
         <div class="post-actions">
-            <div class="post-action" onclick="toggleLike(${poll.id})">
-                <svg viewBox="0 0 24 24">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
-                <span>${poll.likes}</span>
-            </div>
-            <div class="post-action" onclick="openCommentsModal(${poll.id})">
-                <svg viewBox="0 0 24 24">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-                </svg>
+            <div class="post-action" onclick="openCommentsModal('${poll.id}')">
+                <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                 <span>${poll.comments}</span>
             </div>
-        </div>
-    `;
+        </div>`;
 }
 
-// ===== ACCIONES DE POSTS =====
-async function toggleLike(postId) {
+// ===== VOTAR EN DEBATE (tabla: debate_votes) =====
+async function voteDebate(debateId, voteType) {
+    if (!currentUser) return;
+    const post = posts.find(p => p.id === debateId);
+    if (!post) return;
+
     try {
-        const response = await fetch(`${API_BASE_URL}/posts/${postId}/like`, {
-            method: 'POST',
-            credentials: 'include'
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // Actualizar el post en la lista local
-            const post = posts.find(p => p.id === postId);
-            if (post) {
-                post.liked = result.data.liked;
-                post.likes = result.data.likes_count;
-                renderPosts();
+        const { data: existing } = await supabaseClient
+            .from('debate_votes').select('id, vote_type')
+            .eq('debate_id', debateId).eq('user_id', currentUser.id).maybeSingle();
+
+        if (existing) {
+            if (existing.vote_type === voteType) {
+                await supabaseClient.from('debate_votes').delete().eq('id', existing.id);
+                if (voteType === 'upvote') { post.liked = false; post.likes = Math.max(0, post.likes - 1); }
+                else { post.disliked = false; post.dislikes = Math.max(0, post.dislikes - 1); }
+            } else {
+                await supabaseClient.from('debate_votes').update({ vote_type: voteType }).eq('id', existing.id);
+                if (voteType === 'upvote') { post.liked = true; post.disliked = false; post.likes++; post.dislikes = Math.max(0, post.dislikes - 1); }
+                else { post.disliked = true; post.liked = false; post.dislikes++; post.likes = Math.max(0, post.likes - 1); }
             }
         } else {
-            showNotification(result.message || 'Error actualizando like', 'error');
+            await supabaseClient.from('debate_votes').insert([{ debate_id: debateId, user_id: currentUser.id, vote_type: voteType }]);
+            if (voteType === 'upvote') { post.liked = true; post.likes++; }
+            else { post.disliked = true; post.dislikes++; }
         }
-    } catch (error) {
-        console.error('Error toggling like:', error);
-        showNotification('Error de conexión', 'error');
+
+        // Actualizar contadores en BD
+        await supabaseClient.from('debates')
+            .update({ upvotes_count: post.likes, downvotes_count: post.dislikes })
+            .eq('id', debateId);
+
+        renderPosts();
+    } catch (err) {
+        console.error('Error votando:', err);
+        showNotification('Error al registrar voto', 'error');
     }
 }
 
-async function voteInPoll(pollId, optionIndex) {
+// ===== VOTAR EN ENCUESTA (tabla: poll_votes) =====
+async function voteInPoll(pollId, optionId) {
+    if (!currentUser) return;
     try {
-        const response = await fetch(`${API_BASE_URL}/polls/${pollId}/vote`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'include',
-            body: JSON.stringify({ option_index: optionIndex })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showNotification('Voto registrado exitosamente', 'success');
-            // Actualizar los datos de la encuesta
-            const post = posts.find(p => p.poll_id === pollId);
-            if (post) {
-                post.userVoted = true;
-                post.options = result.data.options;
-                post.totalVotes = result.data.total_votes;
-                renderPosts();
-            }
-        } else {
-            showNotification(result.message || 'Error votando', 'error');
+        const { error } = await supabaseClient.from('poll_votes').insert([{
+            poll_id: pollId, option_id: optionId, user_id: currentUser.id
+        }]);
+        if (error) throw error;
+
+        const poll = posts.find(p => p.poll_id === pollId);
+        const option = poll?.options.find(o => o.id === optionId);
+        if (option) {
+            await supabaseClient.from('poll_options').update({ votes_count: (option.votes || 0) + 1 }).eq('id', optionId);
+            await supabaseClient.from('polls').update({ total_votes: (poll.totalVotes || 0) + 1 }).eq('id', pollId);
         }
-    } catch (error) {
-        console.error('Error voting in poll:', error);
-        showNotification('Error de conexión', 'error');
+
+        showNotification('Voto registrado exitosamente', 'success');
+        await loadPostsFromDB();
+    } catch (err) {
+        if (err.code === '23505') showNotification('Ya has votado en esta encuesta', 'info');
+        else showNotification('Error al votar: ' + err.message, 'error');
     }
 }
 
 function sharePost(postId) {
-    const post = posts.find(p => p.id === postId);
-    if (!post) return;
-    
-    if (navigator.share) {
-        navigator.share({
-            title: post.title,
-            text: `Mira esta publicación en POLITIC-SANDBOX: ${post.title}`,
-            url: window.location.href
-        });
-    } else {
-        navigator.clipboard.writeText(window.location.href);
-        showNotification('Enlace copiado al portapapeles', 'success');
-    }
+    if (navigator.share) navigator.share({ title: 'POLITIC-SANDBOX', url: window.location.href });
+    else { navigator.clipboard.writeText(window.location.href); showNotification('Enlace copiado al portapapeles', 'success'); }
 }
 
-function openCommentsModal(postId) {
-    // Por implementar: modal de comentarios
-    showNotification('Funcionalidad de comentarios próximamente', 'info');
-}
+function openCommentsModal(postId) { showNotification('Comentarios próximamente disponibles', 'info'); }
 
-// ===== USUARIOS ACTIVOS =====
-async function loadActiveUsers() {
-    // Los usuarios activos ya se cargan con las estadísticas
-    renderActiveUsers();
-}
-
-function renderActiveUsers() {
-    const activeUsersContainer = document.getElementById('activeUsers');
-    if (!activeUsersContainer) return;
-    
-    activeUsersContainer.innerHTML = activeUsers.map(user => `
-        <div class="user-item">
-            <img src="${user.avatar}" alt="${user.name}">
-            <div class="user-info">
-                <div class="user-name">${user.name}</div>
-                <div class="user-status">${user.status}</div>
-            </div>
-        </div>
-    `).join('');
-}
-
-// ===== CARGA DE MÁS POSTS =====
+// ===== CARGAR MÁS (tabla: debates) =====
 async function loadMorePosts() {
-    const loadMoreBtn = document.getElementById('loadMoreBtn');
-    if (!loadMoreBtn) return;
-    
-    loadMoreBtn.classList.add('loading');
-    loadMoreBtn.textContent = 'Cargando...';
-    
+    const btn = document.getElementById('loadMoreBtn');
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = 'Cargando...';
+
     try {
-        const offset = posts.length;
-        const response = await fetch(`${API_BASE_URL}/posts?offset=${offset}`, {
-            credentials: 'include'
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            const newPosts = result.data.posts;
-            
-            if (newPosts.length > 0) {
-                posts = [...posts, ...newPosts];
-                renderPosts();
-                showNotification(`${newPosts.length} publicaciones más cargadas`, 'success');
-            } else {
-                showNotification('No hay más publicaciones', 'info');
-            }
+        const offset = posts.filter(p => p.type === 'debate').length;
+        const { data, error } = await supabaseClient
+            .from('debates')
+            .select(`id, title, category, content, tags, created_at, upvotes_count, downvotes_count, comments_count, profiles:user_id (full_name, avatar_url)`)
+            .eq('is_deleted', false).order('created_at', { ascending: false })
+            .range(offset, offset + 9);
+
+        if (error) throw error;
+
+        if (data?.length > 0) {
+            posts = [...posts, ...data.map(d => ({
+                id: d.id, type: 'debate', category: d.category || 'debate',
+                title: d.title, content: d.content,
+                tags: Array.isArray(d.tags) ? d.tags : [],
+                author: d.profiles?.full_name || 'Estudiante',
+                avatar: d.profiles?.avatar_url || 'https://via.placeholder.com/40',
+                timestamp: d.created_at,
+                likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
+                liked: false, disliked: false
+            }))];
+            renderPosts();
+            showNotification(`${data.length} publicaciones más cargadas`, 'success');
         } else {
-            showNotification('Error cargando más publicaciones', 'error');
+            showNotification('No hay más publicaciones', 'info');
         }
-    } catch (error) {
-        console.error('Error loading more posts:', error);
-        showNotification('Error de conexión', 'error');
-    } finally {
-        loadMoreBtn.classList.remove('loading');
-        loadMoreBtn.textContent = 'Cargar más publicaciones';
-    }
+    } catch (err) { showNotification('Error cargando más publicaciones', 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Cargar más publicaciones'; }
 }
 
 // ===== UTILIDADES =====
 function getTimeAgo(timestamp) {
-    const now = new Date();
-    const time = new Date(timestamp);
-    const diffInSeconds = Math.floor((now - time) / 1000);
-    
-    if (diffInSeconds < 60) return 'Hace un momento';
-    if (diffInSeconds < 3600) return `Hace ${Math.floor(diffInSeconds / 60)} minutos`;
-    if (diffInSeconds < 86400) return `Hace ${Math.floor(diffInSeconds / 3600)} horas`;
-    if (diffInSeconds < 2592000) return `Hace ${Math.floor(diffInSeconds / 86400)} días`;
-    
-    return time.toLocaleDateString();
+    if (!timestamp) return '';
+    const diff = Math.floor((Date.now() - new Date(timestamp)) / 1000);
+    if (diff < 60) return 'Hace un momento';
+    if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`;
+    if (diff < 86400) return `Hace ${Math.floor(diff / 3600)} h`;
+    if (diff < 2592000) return `Hace ${Math.floor(diff / 86400)} días`;
+    return new Date(timestamp).toLocaleDateString('es-MX');
 }
 
 function getCategoryLabel(category) {
-    const labels = {
-        debate: 'Debate',
-        announcement: 'Anuncio',
-        question: 'Pregunta',
-        proposal: 'Propuesta',
-        poll: 'Encuesta'
-    };
-    return labels[category] || category;
+    return {
+        elecciones:  '🗳️ Elecciones',
+        reformas:    '📋 Reformas',
+        movimientos: '✊ Movimientos',
+        general:     '💬 General',
+        poll:        '📊 Encuesta'
+    }[category] || category;
 }
 
 function showNotification(message, type = 'info') {
-    // Crear elemento de notificación
-    const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            <span>${message}</span>
-            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
-        </div>
-    `;
-    
-    // Agregar estilos si no existen
-    if (!document.querySelector('#notification-styles')) {
-        const styles = document.createElement('style');
-        styles.id = 'notification-styles';
-        styles.textContent = `
-            .notification {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                min-width: 300px;
-                padding: 1rem;
-                border-radius: 0.5rem;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                z-index: 9999;
-                animation: slideInRight 0.3s ease-out;
-            }
-            .notification-success { background: #10b981; color: white; }
-            .notification-error { background: #ef4444; color: white; }
-            .notification-info { background: #3b82f6; color: white; }
-            .notification-warning { background: #f59e0b; color: white; }
-            .notification-content {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            .notification-close {
-                background: none;
-                border: none;
-                color: currentColor;
-                font-size: 1.2rem;
-                cursor: pointer;
-                margin-left: 1rem;
-            }
-            @keyframes slideInRight {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            .post-action.liked {
-                color: #ef4444;
-            }
-            .poll-option.voted {
-                position: relative;
-                background: var(--bg-secondary);
-                cursor: default;
-            }
-            .poll-expired {
-                color: var(--text-secondary);
-                font-style: italic;
-                text-align: center;
-                margin-top: 1rem;
-            }
-        `;
-        document.head.appendChild(styles);
-    }
-    
-    document.body.appendChild(notification);
-    
-    // Auto-remover después de 5 segundos
-    setTimeout(() => {
-        notification.remove();
-    }, 5000);
-}
-
-// ===== DATOS MOCK COMO FALLBACK =====
-function loadMockData() {
-    posts = [
-        {
-            id: 1,
-            type: 'post',
-            category: 'debate',
-            title: '¿Deberían las universidades públicas ser completamente gratuitas?',
-            content: 'He estado pensando sobre el acceso a la educación superior y me parece que eliminar completamente las cuotas podría beneficiar a más estudiantes. ¿Qué opinan? ¿Cómo se financiaría esto?',
-            tags: ['educacion', 'financiamiento', 'acceso'],
-            author: 'María González',
-            avatar: 'https://via.placeholder.com/40',
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-            likes: 15,
-            comments: 8,
-            shares: 3,
-            liked: false
-        }
-    ];
-    
-    activeUsers = [
-        {
-            id: 1,
-            name: 'Ana García',
-            avatar: 'https://via.placeholder.com/32',
-            status: 'En línea'
-        }
-    ];
+    const n = document.createElement('div');
+    n.className = `notification notification-${type}`;
+    n.innerHTML = `<div class="notification-content"><span>${message}</span><button class="notification-close" onclick="this.parentElement.parentElement.remove()">&times;</button></div>`;
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 5000);
 }

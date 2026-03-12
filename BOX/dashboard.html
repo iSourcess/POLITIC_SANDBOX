@@ -13,22 +13,29 @@
         <nav class="navbar">
             <div class="nav-brand">
                 <div class="logo">
-                    <svg viewBox="0 0 24 24" width="32" height="32">
-                        <img src="images/logo.svg" alt="Politic Sandbox Logo" class="logo">
-                    </svg>
+                    <img src="images/logo.svg" alt="Politic Sandbox Logo" class="logo-img">
                     <span>POLITIC-SANDBOX</span>
                 </div>
             </div>
             
+            <div class="nav-center">
+                <div class="search-bar">
+                    <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="searchInput" placeholder="Buscar debates, encuestas, usuarios..." autocomplete="off">
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+            </div>
+
             <div class="nav-menu">
                 <a href="#debates" class="nav-link active">Debates</a>
-                <a href="#encuestas" class="nav-link">Encuestas</a>
-                <a href="#estudiantes" class="nav-link">Estudiantes</a>
                 <a href="#perfil" class="nav-link">Mi Perfil</a>
             </div>
             
             <div class="nav-actions">
-                <button class="theme-toggle" id="themeToggle">
+                <button class="theme-toggle" id="themeToggle" title="Cambiar tema">
                     <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20">
                         <circle cx="12" cy="12" r="5"/>
                         <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
@@ -79,59 +86,14 @@
                 </div>
             </section>
 
-            <!-- Stats Cards -->
-            <section class="stats-section">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon debates">🎯</div>
-                        <div class="stat-content">
-                            <h3 id="debatesCount">24</h3>
-                            <p>Debates Activos</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon polls">📊</div>
-                        <div class="stat-content">
-                            <h3 id="pollsCount">12</h3>
-                            <p>Encuestas Activas</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon students">👥</div>
-                        <div class="stat-content">
-                            <h3 id="studentsCount">156</h3>
-                            <p>Estudiantes Conectados</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon engagement">💬</div>
-                        <div class="stat-content">
-                            <h3 id="engagementCount">89%</h3>
-                            <p>Participación</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <!-- Content Sections -->
             <div class="content-sections">
                 <!-- Sidebar -->
                 <aside class="sidebar">
                     <div class="sidebar-section">
                         <h3>Temas Populares</h3>
-                        <div class="topic-tags">
-                            <span class="topic-tag">#Becas</span>
-                            <span class="topic-tag">#Infraestructura</span>
-                            <span class="topic-tag">#Deporte</span>
-                            <span class="topic-tag">#Cultura</span>
-                            <span class="topic-tag">#Académico</span>
-                        </div>
-                    </div>
-                    
-                    <div class="sidebar-section">
-                        <h3>Estudiantes Activos</h3>
-                        <div class="active-users" id="activeUsers">
-                            <!-- Se llenará dinámicamente -->
+                        <div class="topic-tags" id="popularTags">
+                            <span class="topic-tag loading-tag">Cargando...</span>
                         </div>
                     </div>
                 </aside>
@@ -149,7 +111,10 @@
                     </div>
                     
                     <div class="posts-container" id="postsContainer">
-                        <!-- Posts se cargarán dinámicamente -->
+                        <div class="loading-posts">
+                            <div class="loading-spinner"></div>
+                            <p>Cargando publicaciones...</p>
+                        </div>
                     </div>
                     
                     <div class="load-more">
@@ -178,10 +143,7 @@
                     <label for="postCategory">Categoría</label>
                     <select id="postCategory" name="category" required>
                         <option value="">Seleccionar categoría</option>
-                        <option value="debate">Debate</option>
-                        <option value="announcement">Anuncio</option>
-                        <option value="question">Pregunta</option>
-                        <option value="proposal">Propuesta</option>
+                        <!-- Se llenará dinámicamente al abrir el modal -->
                     </select>
                 </div>
                 
@@ -242,6 +204,7 @@
             </form>
         </div>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/dashboard.js"></script>
 </body>
