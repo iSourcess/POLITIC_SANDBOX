@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLITIC-SANDBOX - Mi Perfil</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/profile.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header Navigation (igual al dashboard) -->
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo">
+                    <img src="images/logo.svg" alt="Politic Sandbox Logo" class="logo-img">
+                    <span>POLITIC-SANDBOX</span>
+                </div>
+            </div>
+
+            <div class="nav-menu">
+                <a href="dashboard.html" class="nav-link">Debates</a>
+                <a href="#encuestas" class="nav-link">Encuestas</a>
+                <a href="#estudiantes" class="nav-link">Estudiantes</a>
+                <a href="profile.html" class="nav-link active">Mi Perfil</a>
+            </div>
+
+            <div class="nav-actions">
+                <button class="theme-toggle" id="themeToggle">
+                    <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="moon-icon" viewBox="0 0 24 24" width="20" height="20">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+
+                <div class="user-menu">
+                    <div class="user-avatar" id="userAvatarNav">
+                        <img src="https://via.placeholder.com/40" alt="Usuario" id="userAvatar">
+                    </div>
+                    <div class="dropdown-menu" id="userDropdown">
+                        <a href="profile.html">Mi Perfil</a>
+                        <a href="#configuracion">Configuración</a>
+                        <hr>
+                        <a href="#logout" id="logoutLink">Cerrar Sesión</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+
+            <!-- Banner de perfil -->
+            <div class="profile-banner">
+                <div class="profile-banner-bg"></div>
+                <div class="profile-banner-content">
+                    <div class="profile-avatar-wrapper">
+                        <div class="profile-avatar-ring">
+                            <img src="https://via.placeholder.com/120" alt="Avatar" id="profileAvatarImg" class="profile-avatar-img">
+                        </div>
+                        <label class="avatar-edit-btn" title="Cambiar foto" id="avatarEditBtn">
+                            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <input type="file" accept="image/*" id="avatarInput" style="display:none">
+                        </label>
+                    </div>
+                    <div class="profile-banner-info">
+                        <div class="profile-name-row">
+                            <h1 class="profile-name" id="profileName">Cargando...</h1>
+                            <span class="profile-badge" id="profileBadge">Estudiante</span>
+                        </div>
+                        <p class="profile-email" id="profileEmail"></p>
+                        <p class="profile-bio" id="profileBio">Sin biografía aún.</p>
+                    </div>
+                    <div class="profile-banner-actions">
+                        <button class="btn btn-primary btn-sm" id="editProfileBtn" onclick="openEditModal()">
+                            <svg viewBox="0 0 24 24" width="16" height="16"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Editar Perfil
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats rápidas -->
+            <div class="profile-stats-bar">
+                <div class="pstat">
+                    <span class="pstat-number" id="statPosts">0</span>
+                    <span class="pstat-label">Publicaciones</span>
+                </div>
+                <div class="pstat-divider"></div>
+                <div class="pstat">
+                    <span class="pstat-number" id="statDebates">0</span>
+                    <span class="pstat-label">Debates</span>
+                </div>
+                <div class="pstat-divider"></div>
+                <div class="pstat">
+                    <span class="pstat-number" id="statLikes">0</span>
+                    <span class="pstat-label">Likes recibidos</span>
+                </div>
+                <div class="pstat-divider"></div>
+                <div class="pstat">
+                    <span class="pstat-number" id="statComments">0</span>
+                    <span class="pstat-label">Comentarios</span>
+                </div>
+            </div>
+
+            <!-- Cuerpo del perfil -->
+            <div class="profile-body">
+
+                <!-- Columna lateral -->
+                <aside class="profile-sidebar">
+                    <!-- Info personal -->
+                    <div class="sidebar-section">
+                        <h3>Información</h3>
+                        <ul class="info-list">
+                            <li>
+                                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.28a16 16 0 0 0 5.61 5.61l.42-.42a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 20.91 16z"/></svg>
+                                <span id="infoUniversity">Universidad no especificada</span>
+                            </li>
+                            <li>
+                                <svg viewBox="0 0 24 24" width="16" height="16"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                                <span id="infoCareer">Carrera no especificada</span>
+                            </li>
+                            <li>
+                                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                <span id="infoSemester">Semestre no especificado</span>
+                            </li>
+                            <li>
+                                <svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                <span id="infoJoinDate">Miembro desde —</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Intereses -->
+                    <div class="sidebar-section">
+                        <h3>Intereses Políticos</h3>
+                        <div class="topic-tags" id="profileInterests">
+                            <span class="topic-tag pcolor-gray">Sin intereses aún</span>
+                        </div>
+                    </div>
+
+                    <!-- Actividad reciente -->
+                    <div class="sidebar-section">
+                        <h3>Actividad Reciente</h3>
+                        <div class="activity-list" id="activityList">
+                            <p class="empty-hint">Sin actividad registrada.</p>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Feed principal del perfil -->
+                <section class="profile-feed">
+                    <div class="profile-tabs">
+                        <button class="profile-tab active" data-tab="posts">Mis Publicaciones</button>
+                        <button class="profile-tab" data-tab="debates">Mis Debates</button>
+                        <button class="profile-tab" data-tab="polls">Mis Encuestas</button>
+                        <button class="profile-tab" data-tab="liked">Me gusta</button>
+                    </div>
+
+                    <div class="profile-tab-content" id="tabContent">
+                        <!-- Se rellena dinámicamente -->
+                        <div class="empty-state" id="emptyFeedMsg">
+                            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                            <p>Aún no hay publicaciones aquí.</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Editar Perfil -->
+    <div class="modal" id="editProfileModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Editar Perfil</h3>
+                <button class="modal-close" onclick="closeModal('editProfileModal')">&times;</button>
+            </div>
+            <form class="modal-body" id="editProfileForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editName">Nombre completo</label>
+                        <input type="text" id="editName" name="full_name" required placeholder="Tu nombre">
+                    </div>
+                    <div class="form-group">
+                        <label for="editSemester">Semestre</label>
+                        <select id="editSemester" name="semester">
+                            <option value="">Seleccionar</option>
+                            <option value="1">1°</option>
+                            <option value="2">2°</option>
+                            <option value="3">3°</option>
+                            <option value="4">4°</option>
+                            <option value="5">5°</option>
+                            <option value="6">6°</option>
+                            <option value="7">7°</option>
+                            <option value="8">8°</option>
+                            <option value="9">9° o superior</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editUniversity">Universidad</label>
+                        <input type="text" id="editUniversity" name="university" placeholder="Nombre de tu universidad">
+                    </div>
+                    <div class="form-group">
+                        <label for="editCareer">Carrera</label>
+                        <input type="text" id="editCareer" name="career" placeholder="Tu carrera">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="editBio">Biografía</label>
+                    <textarea id="editBio" name="bio" rows="3" placeholder="Cuéntanos un poco sobre ti..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Intereses Políticos</label>
+                    <div class="interests-picker" id="interestsPicker">
+                        <label class="interest-chip"><input type="checkbox" value="Democracia"><span>Democracia</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Derechos Humanos"><span>Derechos Humanos</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Medio Ambiente"><span>Medio Ambiente</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Economía"><span>Economía</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Educación"><span>Educación</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Salud Pública"><span>Salud Pública</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Seguridad"><span>Seguridad</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Política Internacional"><span>Política Internacional</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Feminismo"><span>Feminismo</span></label>
+                        <label class="interest-chip"><input type="checkbox" value="Tecnología y Política"><span>Tecnología y Política</span></label>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('editProfileModal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="saveProfileBtn">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/profile.js"></script>
+</body>
+</html>
