@@ -479,3 +479,28 @@
         gap: 0.75rem;
     }
 }
+
+/* ===== ADDITIONS ===== */
+.profile-post-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.6rem;
+}
+
+.liked-author {
+    font-size: 0.78rem;
+    color: var(--text-light);
+    font-style: italic;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-light);
+    border-top: 3px solid var(--primary-purple);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
