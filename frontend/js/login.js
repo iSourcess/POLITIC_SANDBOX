@@ -1,339 +1,419 @@
-// Estado global de la aplicación
-let currentForm = 'login';
+// ============================================
+// POLITIC-SANDBOX - LOGIN CON SUPABASE
+// ============================================
 
-// Elementos del DOM
-const loginForm = document.getElementById('loginForm');
-const registerForm = document.getElementById('registerForm');
-const loadingOverlay = document.getElementById('loadingOverlay');
-const messageContainer = document.getElementById('messageContainer');
-const tabButtons = document.querySelectorAll('.tab-btn');
+// ⚠️ IMPORTANTE: Las credenciales se inicializan en el HTML
+// Este archivo asume que 'supabase' ya está disponible globalmente
 
-// API Base URL - cambiar por la URL de tu servidor Python
-const API_BASE_URL = 'http://localhost:8000/api';
+// Verificar que Supabase esté disponible
+if (typeof supabase === 'undefined') {
+    console.error('❌ ERROR: Supabase no está inicializado. Verifica que el SDK y las credenciales estén en el HTML.');
+}
 
-// Inicialización cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', function() {
-    initializeEventListeners();
-    checkAuthStatus();
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Iniciando POLITIC-SANDBOX...');
     
-    // Agregar event listeners para los botones de las pestañas
-    document.getElementById('loginTab').addEventListener('click', showLogin);
-    document.getElementById('registerTab').addEventListener('click', showRegister);
+    // Verificar si ya hay sesión activa
+    await checkExistingSession();
+    
+    // Configurar event listeners
+    setupEventListeners();
+    
+    // Verificar si viene de redirect de OAuth
+    handleOAuthRedirect();
 });
 
-// Configurar event listeners
-function initializeEventListeners() {
-    // Event listeners para los formularios
-    loginForm.addEventListener('submit', handleLogin);
-    registerForm.addEventListener('submit', handleRegister);
+// ============================================
+// VERIFICAR SESIÓN EXISTENTE
+// ============================================
+
+async function checkExistingSession() {
+    const { data: { session } } = await supabase.auth.getSession();
     
-    // Event listeners para validación en tiempo real
-    const inputs = document.querySelectorAll('input');
-    inputs.forEach(input => {
-        input.addEventListener('blur', validateField);
-        input.addEventListener('input', clearErrors);
-    });
-    
-    // Event listener para el select de universidad
-    document.getElementById('university').addEventListener('change', validateField);
+    if (session) {
+        console.log('✅ Sesión activa detectada');
+        showLoadingOverlay('Redirigiendo...');
+        setTimeout(() => {
+            window.location.href = 'home.html';
+        }, 1000);
+    }
 }
 
-// Cambiar entre formularios de login y registro
-function showLogin() {
-    currentForm = 'login';
-    updateFormDisplay();
-}
+// ============================================
+// MANEJO DE OAUTH REDIRECT
+// ============================================
 
-function showRegister() {
-    currentForm = 'register';
-    updateFormDisplay();
-}
-
-function updateFormDisplay() {
-    const forms = document.querySelectorAll('.auth-form');
-    const buttons = document.querySelectorAll('.tab-btn');
+async function handleOAuthRedirect() {
+    const { data: { session }, error } = await supabase.auth.getSession();
     
-    forms.forEach(form => form.classList.remove('active'));
-    buttons.forEach(btn => btn.classList.remove('active'));
-    
-    if (currentForm === 'login') {
-        loginForm.classList.add('active');
-        buttons[0].classList.add('active');
-    } else {
-        registerForm.classList.add('active');
-        buttons[1].classList.add('active');
+    if (error) {
+        console.error('Error en OAuth:', error);
+        showMessage('Error al iniciar sesión con Google', 'error');
+        hideLoadingOverlay();
+        return;
     }
     
-    clearAllErrors();
+    if (session) {
+        console.log('✅ Login con OAuth exitoso');
+        showMessage('¡Bienvenido!', 'success');
+        setTimeout(() => {
+            window.location.href = 'home.html';
+        }, 1000);
+    }
 }
 
-// Manejar el inicio de sesión
+// ============================================
+// LOGIN CON EMAIL Y CONTRASEÑA
+// ============================================
+
 async function handleLogin(event) {
     event.preventDefault();
     
-    const formData = new FormData(event.target);
-    const email = formData.get('email');
-    const password = formData.get('password');
-    const rememberMe = document.getElementById('rememberMe').checked;
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const rememberMe = document.getElementById('rememberMe')?.checked || false;
     
-    // Validar formulario
-    if (!validateLoginForm(email, password)) {
-        return;
-    }
-    
-    showLoading();
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/login`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                email,
-                password,
-                remember_me: rememberMe
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            // Login exitoso
-            localStorage.setItem('authToken', data.token);
-            localStorage.setItem('userData', JSON.stringify(data.user));
-            
-            if (rememberMe) {
-                localStorage.setItem('rememberAuth', 'true');
-            }
-            
-            showMessage('Inicio de sesión exitoso. Redirigiendo...', 'success');
-            
-            // Redireccionar al dashboard después de 2 segundos
-            setTimeout(() => {
-                window.location.href = 'dashboard.html';
-            }, 2000);
-            
-        } else {
-            // Error en el login
-            handleLoginError(data);
-        }
-        
-    } catch (error) {
-        console.error('Error en login:', error);
-        showMessage('Error de conexión. Por favor, intenta más tarde.', 'error');
-    }
-    
-    hideLoading();
-}
-
-// Manejar el registro
-async function handleRegister(event) {
-    event.preventDefault();
-    
-    const formData = new FormData(event.target);
-    const userData = {
-        name: formData.get('name'),
-        email: formData.get('email'),
-        password: formData.get('password'),
-        confirmPassword: formData.get('confirmPassword'),
-        university: formData.get('university')
-    };
-    
-    // Validar formulario
-    if (!validateRegisterForm(userData)) {
-        return;
-    }
-    
-    showLoading();
-    
-    try {
-        // Simulación de registro exitoso (para desarrollo)
-        // En un entorno real, esto sería una llamada a la API
-        console.log('Datos de registro:', userData);
-        
-        // Simular un tiempo de procesamiento
-        setTimeout(() => {
-            // Registro exitoso
-            showMessage('Cuenta creada exitosamente. Por favor, inicia sesión.', 'success');
-            
-            // Cambiar a formulario de login
-            setTimeout(() => {
-                showLogin();
-                // Pre-llenar el email en el formulario de login
-                document.getElementById('loginEmail').value = userData.email;
-            }, 1000);
-            
-            hideLoading();
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Error en registro:', error);
-        showMessage('Error de conexión. Por favor, intenta más tarde.', 'error');
-        hideLoading();
-    }
-}
-
-// Validaciones
-function validateLoginForm(email, password) {
-    let isValid = true;
-    
+    // Validaciones
     if (!email) {
-        showFieldError('loginEmailError', 'El correo electrónico es requerido');
-        isValid = false;
-    } else if (!isValidEmail(email)) {
-        showFieldError('loginEmailError', 'Ingresa un correo electrónico válido');
-        isValid = false;
+        showFieldError('loginEmail', 'El correo electrónico es requerido');
+        return;
+    }
+    
+    if (!isValidEmail(email)) {
+        showFieldError('loginEmail', 'Ingresa un correo electrónico válido');
+        return;
     }
     
     if (!password) {
-        showFieldError('loginPasswordError', 'La contraseña es requerida');
-        isValid = false;
-    } else if (password.length < 6) {
-        showFieldError('loginPasswordError', 'La contraseña debe tener al menos 6 caracteres');
-        isValid = false;
+        showFieldError('loginPassword', 'La contraseña es requerida');
+        return;
     }
     
-    return isValid;
+    if (password.length < 6) {
+        showFieldError('loginPassword', 'La contraseña debe tener al menos 6 caracteres');
+        return;
+    }
+    
+    clearAllErrors();
+    showLoadingOverlay('Iniciando sesión...');
+    
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password
+        });
+
+        if (error) throw error;
+
+        console.log('✅ Login exitoso:', data);
+        
+        if (rememberMe) {
+            localStorage.setItem('rememberMe', 'true');
+        }
+        
+        hideLoadingOverlay();
+        showMessage('¡Inicio de sesión exitoso! Redirigiendo...', 'success');
+        
+        setTimeout(() => {
+            window.location.href = 'home.html';
+        }, 1500);
+        
+    } catch (error) {
+        hideLoadingOverlay();
+        console.error('❌ Error en login:', error);
+        
+        if (error.message.includes('Invalid login credentials')) {
+            showMessage('Correo o contraseña incorrectos', 'error');
+            showFieldError('loginPassword', 'Credenciales incorrectas');
+        } else if (error.message.includes('Email not confirmed')) {
+            showMessage('Por favor confirma tu correo electrónico', 'error');
+        } else {
+            showMessage(error.message || 'Error al iniciar sesión', 'error');
+        }
+    }
 }
 
-function validateRegisterForm(userData) {
-    let isValid = true;
+// ============================================
+// REGISTRO DE NUEVO USUARIO
+// ============================================
+
+async function handleRegister(event) {
+    event.preventDefault();
     
-    // Validar nombre
-    if (!userData.name.trim()) {
-        showFieldError('registerNameError', 'El nombre es requerido');
-        isValid = false;
-    } else if (userData.name.trim().length < 2) {
-        showFieldError('registerNameError', 'El nombre debe tener al menos 2 caracteres');
-        isValid = false;
+    const fullName = document.getElementById('registerName').value.trim();
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    const university = document.getElementById('university').value;
+    const acceptTerms = document.getElementById('acceptTerms')?.checked || false;
+    
+    clearAllErrors();
+    
+    // Validaciones
+    if (!fullName) {
+        showFieldError('registerName', 'El nombre es requerido');
+        return;
     }
     
-    // Validar email
-    if (!userData.email) {
-        showFieldError('registerEmailError', 'El correo electrónico es requerido');
-        isValid = false;
-    } else if (!isValidEmail(userData.email)) {
-        showFieldError('registerEmailError', 'Ingresa un correo electrónico válido');
-        isValid = false;
+    if (fullName.length < 3) {
+        showFieldError('registerName', 'El nombre debe tener al menos 3 caracteres');
+        return;
     }
     
-    // Validar contraseña
-    if (!userData.password) {
-        showFieldError('registerPasswordError', 'La contraseña es requerida');
-        isValid = false;
-    } else if (userData.password.length < 8) {
-        showFieldError('registerPasswordError', 'La contraseña debe tener al menos 8 caracteres');
-        isValid = false;
-    } else if (!isValidPassword(userData.password)) {
-        showFieldError('registerPasswordError', 'La contraseña debe incluir mayúsculas, minúsculas y números');
-        isValid = false;
+    if (!email) {
+        showFieldError('registerEmail', 'El correo electrónico es requerido');
+        return;
     }
     
-    // Validar confirmación de contraseña
-    if (userData.password !== userData.confirmPassword) {
-        showFieldError('confirmPasswordError', 'Las contraseñas no coinciden');
-        isValid = false;
+    if (!isValidEmail(email)) {
+        showFieldError('registerEmail', 'Ingresa un correo electrónico válido');
+        return;
     }
     
-    // Validar universidad
-    if (!userData.university) {
-        showFieldError('universityError', 'Selecciona tu universidad');
-        isValid = false;
+    if (!password) {
+        showFieldError('registerPassword', 'La contraseña es requerida');
+        return;
     }
     
-    // Validar términos y condiciones
-    const acceptTerms = document.getElementById('acceptTerms');
-    if (acceptTerms && !acceptTerms.checked) {
+    if (password.length < 6) {
+        showFieldError('registerPassword', 'La contraseña debe tener al menos 6 caracteres');
+        return;
+    }
+    
+    if (!confirmPassword) {
+        showFieldError('confirmPassword', 'Confirma tu contraseña');
+        return;
+    }
+    
+    if (password !== confirmPassword) {
+        showFieldError('confirmPassword', 'Las contraseñas no coinciden');
+        showMessage('Las contraseñas no coinciden', 'error');
+        return;
+    }
+    
+    if (!university) {
+        showFieldError('university', 'Selecciona tu universidad');
+        return;
+    }
+    
+    if (!acceptTerms) {
         showMessage('Debes aceptar los términos y condiciones', 'error');
-        isValid = false;
+        return;
     }
     
-    return isValid;
-}
+    showLoadingOverlay('Creando cuenta...');
+    
+    try {
+        const { data, error } = await supabase.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+                data: {
+                    full_name: fullName,
+                    university: university
+                },
+                emailRedirectTo: window.location.origin
+            }
+        });
 
-function validateField(event) {
-    const field = event.target;
-    const fieldId = field.id;
-    const value = field.value.trim();
-    
-    clearFieldError(fieldId);
-    
-    switch (fieldId) {
-        case 'loginEmail':
-        case 'registerEmail':
-            if (value && !isValidEmail(value)) {
-                showFieldError(fieldId + 'Error', 'Ingresa un correo electrónico válido');
-            }
-            break;
+        if (error) throw error;
+
+        console.log('✅ Registro exitoso:', data);
+        
+        hideLoadingOverlay();
+        
+        document.getElementById('registerForm').reset();
+        
+        showMessage('¡Cuenta creada exitosamente! Revisa tu correo para confirmar tu cuenta.', 'success');
+        
+        setTimeout(() => {
+            document.getElementById('loginTab')?.click();
             
-        case 'registerPassword':
-            if (value && value.length < 8) {
-                showFieldError('registerPasswordError', 'Mínimo 8 caracteres');
-            } else if (value && !isValidPassword(value)) {
-                showFieldError('registerPasswordError', 'Incluye mayúsculas, minúsculas y números');
+            const loginEmailInput = document.getElementById('loginEmail');
+            if (loginEmailInput) {
+                loginEmailInput.value = email;
             }
-            break;
-            
-        case 'confirmPassword':
-            const password = document.getElementById('registerPassword').value;
-            if (value && value !== password) {
-                showFieldError('confirmPasswordError', 'Las contraseñas no coinciden');
-            }
-            break;
-            
-        case 'registerName':
-            if (value && value.length < 2) {
-                showFieldError('registerNameError', 'Mínimo 2 caracteres');
-            }
-            break;
+        }, 2000);
+        
+    } catch (error) {
+        hideLoadingOverlay();
+        console.error('❌ Error en registro:', error);
+        
+        if (error.message.includes('already registered')) {
+            showMessage('Este correo ya está registrado', 'error');
+            showFieldError('registerEmail', 'Este correo ya está en uso');
+        } else if (error.message.includes('Password should be')) {
+            showMessage('La contraseña debe tener al menos 6 caracteres', 'error');
+            showFieldError('registerPassword', 'Contraseña muy corta');
+        } else {
+            showMessage(error.message || 'Error al crear la cuenta', 'error');
+        }
     }
 }
 
-// Funciones de utilidad para validación
+// ============================================
+// LOGIN CON GOOGLE (OAUTH)
+// ============================================
+
+async function loginWithGoogle() {
+    console.log('🔵 Iniciando login con Google...');
+    
+    showLoadingOverlay('Redirigiendo a Google...');
+    
+    try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/home.html`,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                }
+            }
+        });
+
+        if (error) throw error;
+        
+        console.log('✅ Redirigiendo a Google OAuth...');
+        
+    } catch (error) {
+        hideLoadingOverlay();
+        console.error('❌ Error al iniciar sesión con Google:', error);
+        showMessage('Error al conectar con Google. Intenta de nuevo.', 'error');
+    }
+}
+
+// ============================================
+// RECUPERAR CONTRASEÑA
+// ============================================
+
+async function handleForgotPassword(event) {
+    event.preventDefault();
+    
+    const email = document.getElementById('loginEmail').value.trim();
+    
+    if (!email) {
+        showFieldError('loginEmail', 'Ingresa tu correo electrónico');
+        showMessage('Por favor ingresa tu correo electrónico primero', 'error');
+        return;
+    }
+    
+    if (!isValidEmail(email)) {
+        showFieldError('loginEmail', 'Ingresa un correo electrónico válido');
+        return;
+    }
+    
+    showLoadingOverlay('Enviando correo...');
+    
+    try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password.html`,
+        });
+
+        if (error) throw error;
+
+        hideLoadingOverlay();
+        showMessage('Correo de recuperación enviado. Revisa tu bandeja de entrada.', 'success');
+        
+    } catch (error) {
+        hideLoadingOverlay();
+        console.error('Error al enviar correo de recuperación:', error);
+        showMessage('Error al enviar el correo. Verifica que el correo sea correcto.', 'error');
+    }
+}
+
+// ============================================
+// EVENT LISTENERS
+// ============================================
+
+function setupEventListeners() {
+    // Formulario de Login
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLogin);
+    }
+    
+    // Formulario de Registro
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+        registerForm.addEventListener('submit', handleRegister);
+    }
+    
+    // Botones de Google
+    const googleButtons = document.querySelectorAll('.btn-google, #googleLoginBtn, [data-login="google"]');
+    googleButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            loginWithGoogle();
+        });
+    });
+    
+    // Link de "Olvidé mi contraseña"
+    const forgotPasswordLinks = document.querySelectorAll('.forgot-password, [data-action="forgot-password"]');
+    forgotPasswordLinks.forEach(link => {
+        link.addEventListener('click', handleForgotPassword);
+    });
+    
+    // Tabs
+    const loginTab = document.getElementById('loginTab');
+    const registerTab = document.getElementById('registerTab');
+    
+    if (loginTab && registerTab) {
+        loginTab.addEventListener('click', () => {
+            loginTab.classList.add('active');
+            registerTab.classList.remove('active');
+            document.getElementById('loginForm')?.classList.add('active');
+            document.getElementById('registerForm')?.classList.remove('active');
+            clearAllErrors();
+        });
+        
+        registerTab.addEventListener('click', () => {
+            registerTab.classList.add('active');
+            loginTab.classList.remove('active');
+            document.getElementById('registerForm')?.classList.add('active');
+            document.getElementById('loginForm')?.classList.remove('active');
+            clearAllErrors();
+        });
+    }
+    
+    // Limpiar errores al escribir
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.addEventListener('input', function() {
+            clearFieldError(this.id);
+        });
+    });
+}
+
+// ============================================
+// VALIDACIONES
+// ============================================
+
 function isValidEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
 }
 
-function isValidPassword(password) {
-    // Al menos una mayúscula, una minúscula y un número
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
-    return passwordRegex.test(password);
-}
+// ============================================
+// MANEJO DE ERRORES
+// ============================================
 
-// Manejo de errores
-function handleLoginError(data) {
-    if (data.field_errors) {
-        Object.keys(data.field_errors).forEach(field => {
-            const errorElement = field === 'email' ? 'loginEmailError' : 'loginPasswordError';
-            showFieldError(errorElement, data.field_errors[field]);
-        });
-    } else {
-        showMessage(data.message || 'Error al iniciar sesión', 'error');
-    }
-}
-
-function handleRegisterError(data) {
-    if (data.field_errors) {
-        Object.keys(data.field_errors).forEach(field => {
-            const errorElement = 'register' + field.charAt(0).toUpperCase() + field.slice(1) + 'Error';
-            showFieldError(errorElement, data.field_errors[field]);
-        });
-    } else {
-        showMessage(data.message || 'Error al crear la cuenta', 'error');
-    }
-}
-
-function showFieldError(elementId, message) {
-    const errorElement = document.getElementById(elementId);
-    const inputElement = errorElement.previousElementSibling;
+function showFieldError(fieldId, message) {
+    const errorElement = document.getElementById(fieldId + 'Error');
+    const inputElement = document.getElementById(fieldId);
     
     if (errorElement) {
         errorElement.textContent = message;
-        if (inputElement) {
-            inputElement.classList.add('error');
-        }
+        errorElement.style.display = 'block';
+    }
+    
+    if (inputElement) {
+        inputElement.classList.add('error');
+        inputElement.focus();
     }
 }
 
@@ -343,207 +423,90 @@ function clearFieldError(fieldId) {
     
     if (errorElement) {
         errorElement.textContent = '';
+        errorElement.style.display = 'none';
     }
+    
     if (inputElement) {
         inputElement.classList.remove('error');
     }
 }
 
-function clearErrors(event) {
-    const fieldId = event.target.id;
-    clearFieldError(fieldId);
-}
-
 function clearAllErrors() {
     const errorElements = document.querySelectorAll('.error-message');
-    const inputElements = document.querySelectorAll('input.error');
-    
-    errorElements.forEach(element => {
-        element.textContent = '';
+    errorElements.forEach(el => {
+        el.textContent = '';
+        el.style.display = 'none';
     });
     
-    inputElements.forEach(element => {
-        element.classList.remove('error');
-    });
-}
-
-// UI Helper functions
-function showLoading() {
-    loadingOverlay.classList.add('show');
-    disableFormButtons();
-}
-
-function hideLoading() {
-    loadingOverlay.classList.remove('show');
-    enableFormButtons();
-}
-
-function disableFormButtons() {
-    const buttons = document.querySelectorAll('.submit-btn');
-    buttons.forEach(btn => {
-        btn.disabled = true;
-        btn.textContent = 'Procesando...';
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.classList.remove('error');
     });
 }
 
-function enableFormButtons() {
-    const loginBtn = loginForm.querySelector('.submit-btn');
-    const registerBtn = registerForm.querySelector('.submit-btn');
+// ============================================
+// UI HELPERS
+// ============================================
+
+function showLoadingOverlay(message = 'Procesando...') {
+    let overlay = document.getElementById('loadingOverlay');
     
-    loginBtn.disabled = false;
-    loginBtn.textContent = 'Iniciar Sesión';
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.className = 'loading-overlay';
+        overlay.innerHTML = `
+            <div class="loading-spinner"></div>
+            <p>${message}</p>
+        `;
+        document.body.appendChild(overlay);
+    } else {
+        const p = overlay.querySelector('p');
+        if (p) p.textContent = message;
+    }
     
-    registerBtn.disabled = false;
-    registerBtn.textContent = 'Crear Cuenta';
+    overlay.style.display = 'flex';
+}
+
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
 }
 
 function showMessage(message, type = 'info') {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}`;
-    messageDiv.textContent = message;
+    let container = document.getElementById('messageContainer');
     
-    messageContainer.appendChild(messageDiv);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'messageContainer';
+        container.className = 'message-container';
+        document.body.appendChild(container);
+    }
     
-    // Auto-remove message after 5 seconds
+    const messageEl = document.createElement('div');
+    messageEl.className = `message message-${type}`;
+    
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✅';
+    if (type === 'error') icon = '❌';
+    if (type === 'warning') icon = '⚠️';
+    
+    messageEl.innerHTML = `
+        <span class="message-icon">${icon}</span>
+        <span class="message-text">${message}</span>
+    `;
+    
+    container.appendChild(messageEl);
+    
+    setTimeout(() => messageEl.classList.add('show'), 10);
+    
     setTimeout(() => {
-        if (messageDiv.parentNode) {
-            messageDiv.parentNode.removeChild(messageDiv);
-        }
+        messageEl.classList.remove('show');
+        setTimeout(() => messageEl.remove(), 300);
     }, 5000);
-    
-    // Allow manual close by clicking
-    messageDiv.addEventListener('click', () => {
-        if (messageDiv.parentNode) {
-            messageDiv.parentNode.removeChild(messageDiv);
-        }
-    });
 }
 
-// Verificar estado de autenticación al cargar la página
-function checkAuthStatus() {
-    const token = localStorage.getItem('authToken');
-    const rememberAuth = localStorage.getItem('rememberAuth');
-    
-    if (token && rememberAuth === 'true') {
-        // Verificar si el token sigue siendo válido
-        validateToken(token);
-    }
-}
-
-async function validateToken(token) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/validate-token`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        
-        if (response.ok) {
-            // Token válido, redireccionar al dashboard
-            window.location.href = 'dashboard.html';
-        } else {
-            // Token inválido, limpiar storage
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('userData');
-            localStorage.removeItem('rememberAuth');
-        }
-    } catch (error) {
-        console.error('Error validating token:', error);
-        // En caso de error, limpiar storage por seguridad
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userData');
-        localStorage.removeItem('rememberAuth');
-    }
-}
-
-// Funciones para manejar la recuperación de contraseña
-function showForgotPassword() {
-    // Esta función se puede expandir para mostrar un modal de recuperación
-    showMessage('Funcionalidad de recuperación de contraseña próximamente disponible', 'info');
-}
-
-// Event listener para el enlace de "¿Olvidaste tu contraseña?"
-document.addEventListener('DOMContentLoaded', function() {
-    const forgotPasswordLink = document.querySelector('.forgot-password');
-    if (forgotPasswordLink) {
-        forgotPasswordLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            showForgotPassword();
-        });
-    }
-    
-    const termsLink = document.querySelector('.terms-link');
-    if (termsLink) {
-        termsLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            showMessage('Términos y condiciones próximamente disponibles', 'info');
-        });
-    }
-});
-
-// Funciones para mejorar la experiencia de usuario
-function togglePasswordVisibility(inputId, buttonId) {
-    const input = document.getElementById(inputId);
-    const button = document.getElementById(buttonId);
-    
-    if (input.type === 'password') {
-        input.type = 'text';
-        button.textContent = '🙈';
-    } else {
-        input.type = 'password';
-        button.textContent = '👁️';
-    }
-}
-
-// Función para autocompletar universidades (opcional)
-function setupUniversityAutocomplete() {
-    const universitySelect = document.getElementById('university');
-    const universities = [
-        'Universidad Nacional Autónoma de México',
-        'Instituto Politécnico Nacional',
-        'Universidad Autónoma Metropolitana',
-        'Tecnológico de Monterrey',
-        'Universidad Iberoamericana',
-        'Universidad La Salle',
-        'Universidad Anáhuac',
-        'Universidad del Valle de México'
-    ];
-    
-    // Agregar más opciones dinámicamente si es necesario
-    universities.forEach(university => {
-        if (!Array.from(universitySelect.options).find(option => option.text === university)) {
-            const option = document.createElement('option');
-            option.value = university.toLowerCase().replace(/\s+/g, '-');
-            option.textContent = university;
-            universitySelect.appendChild(option);
-        }
-    });
-}
-
-// Función para manejar errores de red
-function handleNetworkError(error) {
-    console.error('Network error:', error);
-    if (!navigator.onLine) {
-        showMessage('No hay conexión a internet. Verifica tu conexión e intenta nuevamente.', 'error');
-    } else {
-        showMessage('Error de conexión. Por favor, intenta más tarde.', 'error');
-    }
-}
-
-// Función para logging (útil para debugging)
-function logActivity(action, data = {}) {
-    if (process.env.NODE_ENV === 'development') {
-        console.log(`[POLITIC-SANDBOX] ${action}:`, data);
-    }
-}
-
-// Export functions for potential use in other modules
-window.PoliticSandboxAuth = {
-    showLogin,
-    showRegister,
-    validateToken,
-    showMessage,
-    clearAllErrors
-};
+console.log('📄 POLITIC-SANDBOX Login Script cargado correctamente');
+console.log('🔐 Sistema de autenticación listo');
