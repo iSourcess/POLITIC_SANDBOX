@@ -41,19 +41,11 @@ async function checkAuthStatus() {
     await Promise.all([loadPostsFromDB(), loadPopularTags()]);
 }
 
-async function updateUserInterface() {
+function updateUserInterface() {
     if (!currentUser) return;
-    try {
-        const { data: profile } = await supabaseClient
-            .from('profiles').select('avatar_url, full_name')
-            .eq('id', currentUser.id).single();
-        const userAvatar = document.getElementById('userAvatar');
-        if (userAvatar) {
-            const name = profile?.full_name || currentUser.email?.split('@')[0] || 'U';
-            userAvatar.src = profile?.avatar_url
-                || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=fff&size=40`;
-        }
-    } catch (err) { console.error('Error cargando avatar nav:', err); }
+    const userAvatar = document.getElementById('userAvatar');
+    if (userAvatar && currentUser.user_metadata?.avatar_url)
+        userAvatar.src = currentUser.user_metadata.avatar_url;
 }
 
 // ===== EVENT LISTENERS =====
@@ -241,7 +233,7 @@ async function loadPostsFromDB() {
                 id: d.id, type: 'debate', category: d.category || 'general',
                 title: d.title, content: d.content,
                 tags: Array.isArray(d.tags) ? d.tags : [],
-                author: 'Estudiante', avatar: 'https://via.placeholder.com/40',
+                author: 'Estudiante', avatar: 'https://ui-avatars.com/api/?name=E&background=6366f1&color=fff&size=40',
                 timestamp: d.created_at,
                 likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
                 liked: false, disliked: false
@@ -254,7 +246,7 @@ async function loadPostsFromDB() {
         const { data: pollData, error: pollError } = await supabaseClient
             .from('polls')
             .select(`
-                id, title, description, created_at, total_votes, comments_count,
+                id, title, description, created_at, end_date, is_closed,
                 profiles:user_id (full_name, avatar_url),
                 poll_options (id, option_text, votes_count)
             `)
@@ -263,39 +255,37 @@ async function loadPostsFromDB() {
 
         if (pollError) {
             console.warn('Error cargando encuestas:', pollError.message);
-            // Continuar sin encuestas en lugar de romper todo el feed
         }
 
         const debatesFormatted = (debateData || []).map(d => ({
             id: d.id, type: 'debate', category: d.category || 'general',
             title: d.title, content: d.content,
-            // tags es text[] — Supabase lo devuelve ya como array de JS
             tags: Array.isArray(d.tags) ? d.tags : [],
             author: d.profiles?.full_name || 'Estudiante',
-            avatar: d.profiles?.avatar_url || 'https://via.placeholder.com/40',
+            avatar: d.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(d.profiles?.full_name || 'E')}&background=6366f1&color=fff&size=40`,
             timestamp: d.created_at,
             likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
             liked: false, disliked: false
         }));
 
-        const pollsFormatted = (pollData || []).map(p => {
+        const pollsFormatted = (!pollError && pollData) ? pollData.map(p => {
             const options = (p.poll_options || []).map(opt => ({
                 id: opt.id, text: opt.option_text, votes: opt.votes_count || 0,
-                percentage: p.total_votes > 0 ? Math.round((opt.votes_count / p.total_votes) * 100) : 0
+                percentage: 0
             }));
             return {
                 id: p.id, poll_id: p.id, type: 'poll', category: 'poll',
                 title: p.title, description: p.description,
                 author: p.profiles?.full_name || 'Estudiante',
-                avatar: p.profiles?.avatar_url || 'https://via.placeholder.com/40',
+                avatar: p.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.profiles?.full_name || 'E')}&background=6366f1&color=fff&size=40`,
                 timestamp: p.created_at, options,
-                totalVotes: p.total_votes || 0,
-                isExpired: false,
-                userVoted: false, likes: 0, comments: p.comments_count || 0
+                totalVotes: 0,
+                isExpired: p.is_closed || (p.end_date ? new Date(p.end_date) < new Date() : false),
+                userVoted: false, likes: 0, comments: 0
             };
-        });
+        }) : [];
 
-        posts = [...debatesFormatted, ...pollsFormatted]
+        posts = [...debatesFormatted, ...(typeof pollsFormatted !== 'undefined' ? pollsFormatted : [])]
             .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
         // Verificar votos del usuario actual
@@ -304,7 +294,7 @@ async function loadPostsFromDB() {
                 .from('debate_votes').select('debate_id, vote_type').eq('user_id', currentUser.id);
             (myVotes || []).forEach(v => {
                 const post = posts.find(p => p.id === v.debate_id);
-                if (post) { post.liked = v.vote_type === 'upvote'; post.disliked = v.vote_type === 'downvote'; }
+                if (post) { post.liked = v.vote_type === 'up'; post.disliked = v.vote_type === 'down'; }
             });
 
             const { data: myPollVotes } = await supabaseClient
@@ -454,16 +444,12 @@ async function handleNewPoll(e) {
             user_id: currentUser.id,
             title: formData.get('title'),
             description: formData.get('description'),
-            expires_at: expiresAt,
-            total_votes: 0,
-            comments_count: 0
+            end_date: expiresAt,
+            is_active: true,
+            is_closed: false
         }]).select().single();
-        if (pollError) {
-            console.warn('Error cargando encuestas:', pollError.message);
-            // Continuar sin encuestas en lugar de romper todo el feed
-        }
+        if (pollError) throw pollError;
 
-        // Columna real en tu BD: option_text
         const { error: optError } = await supabaseClient.from('poll_options').insert(
             options.map(text => ({ poll_id: poll.id, option_text: text, votes_count: 0 }))
         );
@@ -643,7 +629,6 @@ async function voteInPoll(pollId, optionId) {
         const option = poll?.options.find(o => o.id === optionId);
         if (option) {
             await supabaseClient.from('poll_options').update({ votes_count: (option.votes || 0) + 1 }).eq('id', optionId);
-            await supabaseClient.from('polls').update({ total_votes: (poll.totalVotes || 0) + 1 }).eq('id', pollId);
         }
 
         showNotification('Voto registrado exitosamente', 'success');
@@ -683,7 +668,7 @@ async function loadMorePosts() {
                 title: d.title, content: d.content,
                 tags: Array.isArray(d.tags) ? d.tags : [],
                 author: d.profiles?.full_name || 'Estudiante',
-                avatar: d.profiles?.avatar_url || 'https://via.placeholder.com/40',
+                avatar: d.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(d.profiles?.full_name || 'E')}&background=6366f1&color=fff&size=40`,
                 timestamp: d.created_at,
                 likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
                 liked: false, disliked: false
