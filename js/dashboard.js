@@ -41,11 +41,19 @@ async function checkAuthStatus() {
     await Promise.all([loadPostsFromDB(), loadPopularTags()]);
 }
 
-function updateUserInterface() {
+async function updateUserInterface() {
     if (!currentUser) return;
-    const userAvatar = document.getElementById('userAvatar');
-    if (userAvatar && currentUser.user_metadata?.avatar_url)
-        userAvatar.src = currentUser.user_metadata.avatar_url;
+    try {
+        const { data: profile } = await supabaseClient
+            .from('profiles').select('avatar_url, full_name')
+            .eq('id', currentUser.id).single();
+        const userAvatar = document.getElementById('userAvatar');
+        if (userAvatar) {
+            const name = profile?.full_name || currentUser.email?.split('@')[0] || 'U';
+            userAvatar.src = profile?.avatar_url
+                || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=fff&size=40`;
+        }
+    } catch (err) { console.error('Error cargando avatar nav:', err); }
 }
 
 // ===== EVENT LISTENERS =====
@@ -246,14 +254,17 @@ async function loadPostsFromDB() {
         const { data: pollData, error: pollError } = await supabaseClient
             .from('polls')
             .select(`
-                id, title, description, created_at, expires_at, total_votes, comments_count,
+                id, title, description, created_at, total_votes, comments_count,
                 profiles:user_id (full_name, avatar_url),
                 poll_options (id, option_text, votes_count)
             `)
             .order('created_at', { ascending: false })
             .limit(10);
 
-        if (pollError) throw pollError;
+        if (pollError) {
+            console.warn('Error cargando encuestas:', pollError.message);
+            // Continuar sin encuestas en lugar de romper todo el feed
+        }
 
         const debatesFormatted = (debateData || []).map(d => ({
             id: d.id, type: 'debate', category: d.category || 'general',
@@ -279,7 +290,7 @@ async function loadPostsFromDB() {
                 avatar: p.profiles?.avatar_url || 'https://via.placeholder.com/40',
                 timestamp: p.created_at, options,
                 totalVotes: p.total_votes || 0,
-                isExpired: p.expires_at ? new Date(p.expires_at) < new Date() : false,
+                isExpired: false,
                 userVoted: false, likes: 0, comments: p.comments_count || 0
             };
         });
@@ -447,7 +458,10 @@ async function handleNewPoll(e) {
             total_votes: 0,
             comments_count: 0
         }]).select().single();
-        if (pollError) throw pollError;
+        if (pollError) {
+            console.warn('Error cargando encuestas:', pollError.message);
+            // Continuar sin encuestas en lugar de romper todo el feed
+        }
 
         // Columna real en tu BD: option_text
         const { error: optError } = await supabaseClient.from('poll_options').insert(

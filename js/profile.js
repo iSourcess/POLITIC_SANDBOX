@@ -442,7 +442,7 @@ async function handleAvatarChange(e) {
 
     try {
         const fileExt = file.name.split('.').pop();
-        const filePath = `avatars/${currentUser.id}.${fileExt}`;
+        const filePath = `${currentUser.id}/avatar.${fileExt}`;
 
         const { error: uploadError } = await supabaseClient.storage
             .from('avatars')
@@ -454,13 +454,19 @@ async function handleAvatarChange(e) {
             .from('avatars')
             .getPublicUrl(filePath);
 
-        const avatarUrl = urlData.publicUrl;
+        // Guardar URL con timestamp para romper caché en todos lados
+        const avatarUrl = urlData.publicUrl + '?t=' + Date.now();
 
-        await supabaseClient
+        const { error: updateError } = await supabaseClient
             .from('profiles')
-            .upsert({ id: currentUser.id, avatar_url: avatarUrl, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+            .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+            .eq('id', currentUser.id);
+
+        if (updateError) throw updateError;
 
         userProfile.avatar_url = avatarUrl;
+        document.getElementById('profileAvatarImg').src = avatarUrl;
+        document.getElementById('userAvatar').src = avatarUrl;
         showNotification('Foto de perfil actualizada ✓', 'success');
     } catch (err) {
         console.error('Error subiendo avatar:', err);
