@@ -389,7 +389,7 @@ body {
     }
     
     .features-section {
-        order: -1;
+        order: 1;
         text-align: center;
     }
     
