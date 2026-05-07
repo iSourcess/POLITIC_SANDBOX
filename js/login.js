@@ -406,26 +406,129 @@ async function checkAuthStatus() {
 }
 
 
-// Funciones para manejar la recuperación de contraseña
-async function showForgotPassword() {
-    const email = document.getElementById('loginEmail').value.trim();
+// ============================================================
+// MODAL DE RECUPERACIÓN DE CONTRASEÑA
+// ============================================================
+function openRecoveryModal() {
+    const modal = document.getElementById('forgotPasswordModal');
+    const input = document.getElementById('recoveryEmail');
+    const errorSpan = document.getElementById('recoveryEmailError');
 
-    // Si ya tiene un email escrito, lo usamos directamente
-    if (email && isValidEmail(email)) {
-        await sendPasswordReset(email);
-    } else {
-        // Pedir el email con un prompt simple
-        const inputEmail = prompt('Ingresa tu correo electrónico para recuperar tu contraseña:');
-        if (inputEmail && isValidEmail(inputEmail)) {
-            await sendPasswordReset(inputEmail);
-        } else if (inputEmail !== null) {
-            showMessage('Por favor ingresa un correo válido.', 'error');
+    // Pre-llenar con el correo del login si ya lo escribió
+    const loginEmail = document.getElementById('loginEmail').value.trim();
+    input.value = isValidEmail(loginEmail) ? loginEmail : '';
+    errorSpan.textContent = '';
+    input.classList.remove('error');
+
+    modal.classList.add('show');
+    // Foco al input después de la animación
+    setTimeout(() => input.focus(), 150);
+}
+
+function closeRecoveryModal() {
+    const modal = document.getElementById('forgotPasswordModal');
+    modal.classList.remove('show');
+}
+
+function initRecoveryModal() {
+    const modal    = document.getElementById('forgotPasswordModal');
+    const cancelBtn = document.getElementById('cancelRecoveryBtn');
+    const sendBtn   = document.getElementById('sendRecoveryBtn');
+    const input     = document.getElementById('recoveryEmail');
+    const errorSpan = document.getElementById('recoveryEmailError');
+
+    // Cerrar al hacer clic en el fondo
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeRecoveryModal();
+    });
+
+    // Cerrar con Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) closeRecoveryModal();
+    });
+
+    cancelBtn.addEventListener('click', closeRecoveryModal);
+
+    // Limpiar error al escribir
+    input.addEventListener('input', function() {
+        errorSpan.textContent = '';
+        input.classList.remove('error');
+    });
+
+    // Enviar con Enter
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') sendBtn.click();
+    });
+
+    sendBtn.addEventListener('click', async function() {
+        const email = input.value.trim();
+
+        // Validar campo vacío
+        if (!email) {
+            errorSpan.textContent = 'El correo electrónico es requerido';
+            input.classList.add('error');
+            input.focus();
+            return;
         }
-    }
+
+        // Validar formato
+        if (!isValidEmail(email)) {
+            errorSpan.textContent = 'Ingresa un correo electrónico válido';
+            input.classList.add('error');
+            input.focus();
+            return;
+        }
+
+        await sendPasswordReset(email);
+    });
+}
+
+// Función que llama el enlace "Olvidaste tu contraseña"
+function showForgotPassword() {
+    openRecoveryModal();
 }
 
 async function sendPasswordReset(email) {
+    const sendBtn   = document.getElementById('sendRecoveryBtn');
+    const errorSpan = document.getElementById('recoveryEmailError');
+    const input     = document.getElementById('recoveryEmail');
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Verificando...';
+    }
     showLoading();
+
+    // 1️⃣ Verificar si el correo existe en la base de datos de auth
+    const { data: userData, error: lookupError } = await supabaseClient
+        .from('profiles')  // tabla de perfiles ligada a auth.users
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+    // Si la tabla 'profiles' no existe o hay error de permisos, intentamos
+    // directamente con resetPasswordForEmail y manejamos la respuesta
+    let emailNotFound = false;
+
+    if (!lookupError && userData === null) {
+        emailNotFound = true;
+    }
+
+    if (emailNotFound) {
+        hideLoading();
+        if (errorSpan) {
+            errorSpan.textContent = 'Este correo no está registrado en la plataforma';
+            if (input) input.classList.add('error');
+        }
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Enviar Enlace';
+        }
+        return;
+    }
+
+    // 2️⃣ Enviar el correo de recuperación
+    if (sendBtn) sendBtn.textContent = 'Enviando...';
 
     const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin + '/reset-password.html'
@@ -433,15 +536,22 @@ async function sendPasswordReset(email) {
 
     hideLoading();
 
+    if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Enviar Enlace';
+    }
+
     if (error) {
         showMessage('Error al enviar el correo. Intenta más tarde.', 'error');
     } else {
+        closeRecoveryModal();
         showMessage(`Se envió un enlace de recuperación a ${email}. Revisa tu bandeja de entrada.`, 'success');
     }
 }
 
-// Event listener para el enlace de "¿Olvidaste tu contraseña?"
+// Event listeners adicionales al cargar el DOM
 document.addEventListener('DOMContentLoaded', function() {
+    // Enlace "Olvidaste tu contraseña"
     const forgotPasswordLink = document.querySelector('.forgot-password');
     if (forgotPasswordLink) {
         forgotPasswordLink.addEventListener('click', function(e) {
@@ -449,7 +559,11 @@ document.addEventListener('DOMContentLoaded', function() {
             showForgotPassword();
         });
     }
-    
+
+    // Inicializar modal de recuperación
+    initRecoveryModal();
+
+    // Enlace de términos
     const termsLink = document.querySelector('.terms-link');
     if (termsLink) {
         termsLink.addEventListener('click', function(e) {

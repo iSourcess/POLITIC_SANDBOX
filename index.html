@@ -129,6 +129,28 @@
         </div>
     </div>
 
+    <!-- Modal de Recuperación de Contraseña -->
+    <div id="forgotPasswordModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span class="modal-icon">🔑</span>
+                <h2 id="modalTitle">Recuperar Contraseña</h2>
+                <p class="modal-subtitle">Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.</p>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label for="recoveryEmail">Correo Electrónico</label>
+                    <input type="email" id="recoveryEmail" name="recoveryEmail" placeholder="tucorreo@ejemplo.com" autocomplete="email">
+                    <span class="error-message" id="recoveryEmailError"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="cancelRecoveryBtn" class="modal-btn modal-btn-secondary">Cancelar</button>
+                <button type="button" id="sendRecoveryBtn" class="modal-btn modal-btn-primary">Enviar Enlace</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>
