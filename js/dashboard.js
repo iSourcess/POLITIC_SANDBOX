@@ -344,26 +344,9 @@ function openNewPostModal() {
     loadCategoryOptions();
 }
 
-async function loadCategoryOptions() {
+function loadCategoryOptions() {
     const select = document.getElementById('postCategory');
     if (!select) return;
-
-    // Leer categorías únicas que ya existen en la BD
-    try {
-        const { data } = await supabaseClient
-            .from('debates')
-            .select('category')
-            .eq('is_deleted', false)
-            .limit(200);
-
-        if (data && data.length > 0) {
-            const existing = [...new Set(data.map(d => d.category).filter(Boolean))].sort();
-            populateCategorySelect(select, existing);
-            return;
-        }
-    } catch (e) { /* continuar */ }
-
-    // Valores exactos del CHECK constraint valid_category en la BD
     populateCategorySelect(select, ['elecciones', 'reformas', 'movimientos', 'general', 'feu', 'social']);
 }
 
@@ -554,16 +537,25 @@ function createDebateHTML(post) {
 }
 
 function createPollHTML(poll) {
+    const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0);
+
     let optionsHTML = (poll.userVoted || poll.isExpired)
-        ? poll.options.map(opt => `
+        ? poll.options.map(opt => {
+            const pct = totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0;
+            return `
             <div class="poll-option voted">
-                <span>${opt.text}</span>
-                <div class="poll-results">${opt.percentage}% (${opt.votes} votos)</div>
-                <div class="poll-progress" style="width: ${opt.percentage}%"></div>
-            </div>`).join('')
+                <div class="poll-bar-label">
+                    <span class="poll-option-text">${opt.text}</span>
+                    <span class="poll-option-count">${opt.votes} votos</span>
+                </div>
+                <div class="poll-bar-track">
+                    <div class="poll-bar-fill" style="width:${pct}%"></div>
+                </div>
+            </div>`;
+        }).join('')
         : poll.options.map(opt => `
             <div class="poll-option" onclick="voteInPoll('${poll.poll_id}', '${opt.id}')">
-                <input type="radio" name="poll_${poll.poll_id}">
+                <div class="poll-radio"></div>
                 <span>${opt.text}</span>
             </div>`).join('');
 
