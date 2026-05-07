@@ -334,27 +334,10 @@ function openNewPostModal() {
     loadCategoryOptions();
 }
 
-async function loadCategoryOptions() {
+function loadCategoryOptions() {
     const select = document.getElementById('postCategory');
     if (!select) return;
-
-    // Leer categorías únicas que ya existen en la BD
-    try {
-        const { data } = await supabaseClient
-            .from('debates')
-            .select('category')
-            .eq('is_deleted', false)
-            .limit(200);
-
-        if (data && data.length > 0) {
-            const existing = [...new Set(data.map(d => d.category).filter(Boolean))].sort();
-            populateCategorySelect(select, existing);
-            return;
-        }
-    } catch (e) { /* continuar */ }
-
-    // Valores exactos del CHECK constraint valid_category en la BD
-    populateCategorySelect(select, ['elecciones', 'reformas', 'movimientos', 'general']);
+    populateCategorySelect(select, ['elecciones', 'reformas', 'movimientos', 'general', 'feu', 'social']);
 }
 
 function populateCategorySelect(select, categories) {
@@ -362,7 +345,9 @@ function populateCategorySelect(select, categories) {
         elecciones: '🗳️ Elecciones',
         reformas:   '📋 Reformas',
         movimientos:'✊ Movimientos',
-        general:    '💬 General'
+        general:    '💬 General',
+        feu:         '🎙️ FEU',
+        social:      '📣 Social',
     };
     select.innerHTML = '<option value="">Seleccionar categoría</option>';
     categories.forEach(cat => {
@@ -699,6 +684,8 @@ function getCategoryLabel(category) {
         reformas:    '📋 Reformas',
         movimientos: '✊ Movimientos',
         general:     '💬 General',
+        feu:         '🎙️ FEU',
+        social:      '📣 Social',
         poll:        '📊 Encuesta'
     }[category] || category;
 }
