@@ -1,0 +1,14 @@
+-- Ejecuta este código en tu SQL Editor de Supabase
+
+-- 1. Crear tabla de reportes
+CREATE TABLE IF NOT EXISTS public.post_reports (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    post_id UUID NOT NULL, -- (Cambia a bigint si el ID de tus debates/encuestas es bigint)
+    user_id UUID NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(post_id, user_id)
+);
+
+-- Deshabilitar RLS temporalmente para simplificar la escritura desde el cliente
+ALTER TABLE public.post_reports DISABLE ROW LEVEL SECURITY;

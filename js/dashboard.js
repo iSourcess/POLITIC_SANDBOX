@@ -71,10 +71,6 @@ function initializeEventListeners() {
     const userDropdown = document.getElementById('userDropdown');
     if (userAvatar && userDropdown) {
         userAvatar.addEventListener('click', (e) => { e.stopPropagation(); userDropdown.classList.toggle('active'); });
-        document.addEventListener('click', (e) => {
-            if (!userAvatar.contains(e.target) && !userDropdown.contains(e.target))
-                userDropdown.classList.remove('active');
-        });
     }
 
     const logoutLink = document.querySelector('a[href="#logout"]');
@@ -90,11 +86,30 @@ function initializeEventListeners() {
     const newPollForm = document.getElementById('newPollForm');
     if (newPollForm) newPollForm.addEventListener('submit', handleNewPoll);
 
+    const editPostForm = document.getElementById('editPostForm');
+    if (editPostForm) editPostForm.addEventListener('submit', submitEditPost);
+
+    const reportPostForm = document.getElementById('reportPostForm');
+    if (reportPostForm) reportPostForm.addEventListener('submit', submitReportPost);
+
     const loadMoreBtn = document.getElementById('loadMoreBtn');
     if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMorePosts);
 
+    // Global click listener for modals and dropdowns
     document.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal')) closeModal(e.target.id);
+        
+        // Close user dropdown
+        if (userAvatar && userDropdown && !userAvatar.contains(e.target) && !userDropdown.contains(e.target)) {
+            userDropdown.classList.remove('active');
+        }
+        
+        // Close post options dropdowns
+        if (!e.target.closest('.post-options-btn')) {
+            document.querySelectorAll('.options-dropdown').forEach(dropdown => {
+                dropdown.classList.remove('show');
+            });
+        }
     });
 
     const searchInput = document.getElementById('searchInput');
@@ -108,6 +123,11 @@ function initializeEventListeners() {
                 document.getElementById('searchResults').classList.remove('show');
         });
     }
+
+    // Intervalo para actualizar botones de editar cada 30 segundos
+    setInterval(() => {
+        renderPosts();
+    }, 30000);
 }
 
 async function logout() {
@@ -246,7 +266,8 @@ async function loadPostsFromDB() {
                 author: 'Estudiante', avatar: 'https://ui-avatars.com/api/?name=E&background=6366f1&color=fff&size=40',
                 timestamp: d.created_at,
                 likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
-                liked: false, disliked: false
+                liked: false, disliked: false,
+                user_id: d.user_id
             }));
             renderPosts();
             return;
@@ -267,6 +288,18 @@ async function loadPostsFromDB() {
             console.warn('Error cargando encuestas:', pollError.message);
         }
 
+        // Obtener reacciones si la tabla existe
+        let allPollReactions = [];
+        if (pollData && pollData.length > 0) {
+            try {
+                const pollIds = pollData.map(p => p.id);
+                const { data: reactData } = await supabaseClient
+                    .from('poll_reactions').select('poll_id, user_id, reaction_type')
+                    .in('poll_id', pollIds);
+                if (reactData) allPollReactions = reactData;
+            } catch(e) { console.warn("No se pudo cargar poll_reactions"); }
+        }
+
         const debatesFormatted = (debateData || []).map(d => ({
             id: d.id, type: 'debate', category: d.category || 'general',
             title: d.title, content: d.content,
@@ -275,7 +308,8 @@ async function loadPostsFromDB() {
             avatar: d.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(d.profiles?.full_name || 'E')}&background=6366f1&color=fff&size=40`,
             timestamp: d.created_at,
             likes: d.upvotes_count || 0, dislikes: d.downvotes_count || 0, comments: d.comments_count || 0,
-            liked: false, disliked: false
+            liked: false, disliked: false,
+            user_id: d.user_id
         }));
 
         const pollsFormatted = (!pollError && pollData) ? pollData.map(p => {
@@ -283,6 +317,15 @@ async function loadPostsFromDB() {
                 id: opt.id, text: opt.option_text, votes: opt.votes_count || 0,
                 percentage: 0
             }));
+            
+            const pollReactions = allPollReactions.filter(r => r.poll_id === p.id);
+            const reactions = {};
+            let userReaction = null;
+            pollReactions.forEach(r => {
+                reactions[r.reaction_type] = (reactions[r.reaction_type] || 0) + 1;
+                if (currentUser && r.user_id === currentUser.id) userReaction = r.reaction_type;
+            });
+
             return {
                 id: p.id, poll_id: p.id, type: 'poll', category: 'poll',
                 title: p.title, description: p.description,
@@ -291,7 +334,8 @@ async function loadPostsFromDB() {
                 timestamp: p.created_at, options,
                 totalVotes: 0,
                 isExpired: p.is_closed || (p.end_date ? new Date(p.end_date) < new Date() : false),
-                userVoted: false, likes: 0, comments: 0
+                userVoted: false, likes: 0, comments: 0,
+                reactions, userReaction
             };
         }) : [];
 
@@ -304,7 +348,7 @@ async function loadPostsFromDB() {
                 .from('debate_votes').select('debate_id, vote_type').eq('user_id', currentUser.id);
             (myVotes || []).forEach(v => {
                 const post = posts.find(p => p.id === v.debate_id);
-                if (post) { post.liked = v.vote_type === 'up'; post.disliked = v.vote_type === 'down'; }
+                if (post) { post.liked = v.vote_type === 'up' || v.vote_type === 'upvote'; post.disliked = v.vote_type === 'down' || v.vote_type === 'downvote'; }
             });
 
             const { data: myPollVotes } = await supabaseClient
@@ -504,14 +548,58 @@ function renderPosts() {
 
 function createDebateHTML(post) {
     const tagsHTML = (post.tags || []).map(tag => `<span class="post-tag">#${tag}</span>`).join('');
+    
+    // Configurar menú de opciones según propiedad del post
+    const isOwner = currentUser && post.user_id === currentUser.id;
+    const postTimeStr = new Date(post.timestamp).getTime();
+    const nowStr = Date.now();
+    const diffMins = Math.floor((nowStr - postTimeStr) / 60000);
+    const canEdit = diffMins < 10;
+    
+    let optionsMenu = '';
+    if (currentUser) {
+        let menuItems = '';
+        if (isOwner) {
+            menuItems += `
+                <button class="dropdown-item" onclick="openEditModal('${post.id}')" ${!canEdit ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Editar ${canEdit ? `<span class="edit-timer">(${10 - diffMins}m restantes)</span>` : '<span class="edit-timer">(Tiempo expirado)</span>'}
+                </button>
+                <button class="dropdown-item danger" onclick="confirmDeletePost('${post.id}')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    Eliminar
+                </button>
+            `;
+        } else {
+            menuItems += `
+                <button class="dropdown-item" onclick="openReportModal('${post.id}')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                    Denunciar post
+                </button>
+            `;
+        }
+        
+        optionsMenu = `
+            <div class="post-options">
+                <button class="post-options-btn" onclick="togglePostOptions('${post.id}', event)">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
+                <div class="options-dropdown" id="dropdown-${post.id}">
+                    ${menuItems}
+                </div>
+            </div>
+        `;
+    }
+
     return `
-        <div class="post-header">
+        <div class="post-header" style="position:relative;">
             <img src="${post.avatar}" alt="${post.author}" class="post-avatar">
             <div class="post-meta">
                 <div class="post-author">${post.author}</div>
                 <div class="post-time">${getTimeAgo(post.timestamp)}</div>
             </div>
             <span class="post-category ${post.category}">${getCategoryLabel(post.category)}</span>
+            ${optionsMenu}
         </div>
         <h3 class="post-title">${post.title}</h3>
         <div class="post-content">${post.content}</div>
@@ -559,6 +647,29 @@ function createPollHTML(poll) {
                 <span>${opt.text}</span>
             </div>`).join('');
 
+    const reactionsList = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+    let topReactions = [];
+    let totalReactionsCount = 0;
+    if (poll.reactions) {
+        const sorted = Object.entries(poll.reactions).filter(([k,v]) => v > 0).sort((a,b) => b[1] - a[1]);
+        topReactions = sorted.slice(0, 3).map(arr => arr[0]);
+        totalReactionsCount = sorted.reduce((sum, arr) => sum + arr[1], 0);
+    }
+    
+    const reactionSummaryHTML = totalReactionsCount > 0 ? `
+        <div class="reaction-summary">
+            ${topReactions.map(emoji => `<span style="font-size:0.9rem">${emoji}</span>`).join('')}
+            <span style="font-size:0.8rem; margin-left:4px">${totalReactionsCount}</span>
+        </div>
+    ` : '';
+
+    const emojisHTML = reactionsList.map(emoji => `
+        <span class="reaction-emoji" onclick="votePollReaction('${poll.id}', '${emoji}')">${emoji}</span>
+    `).join('');
+
+    const currentReaction = poll.userReaction ? poll.userReaction : 'Reaccionar';
+    const isReacted = !!poll.userReaction;
+
     return `
         <div class="post-header">
             <img src="${poll.avatar}" alt="${poll.author}" class="post-avatar">
@@ -571,9 +682,19 @@ function createPollHTML(poll) {
         <h3 class="post-title">${poll.title}</h3>
         ${poll.description ? `<div class="post-content">${poll.description}</div>` : ''}
         <div class="poll-options">${optionsHTML}</div>
-        ${poll.userVoted || poll.isExpired ? `<div class="poll-results" style="margin-top:0.5rem">Total: ${poll.totalVotes} votos</div>` : ''}
+        ${poll.userVoted || poll.isExpired ? `<div class="poll-results" style="margin-top:0.5rem">Total: ${totalVotes} votos</div>` : ''}
         ${poll.isExpired ? '<div class="poll-expired">Encuesta finalizada</div>' : ''}
-        <div class="post-actions">
+        <div class="post-actions" style="margin-top: 1rem;">
+            <div class="reaction-container">
+                <div class="post-action ${isReacted ? 'liked' : ''}">
+                    <svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+                    <span>${currentReaction}</span>
+                </div>
+                <div class="reaction-picker">
+                    ${emojisHTML}
+                </div>
+                ${reactionSummaryHTML}
+            </div>
             <div class="post-action" onclick="openCommentsModal('${poll.id}')">
                 <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                 <span>${poll.comments}</span>
@@ -581,42 +702,122 @@ function createPollHTML(poll) {
         </div>`;
 }
 
-// ===== VOTAR EN DEBATE (tabla: debate_votes) =====
 async function voteDebate(debateId, voteType) {
     if (!currentUser) return;
     const post = posts.find(p => p.id === debateId);
     if (!post) return;
+    
+    // Evitar múltiples clicks simultáneos
+    if (post.isVoting) return;
+    post.isVoting = true;
+
+    // Convertir para que coincida con la base de datos (up/down)
+    const dbVoteType = voteType === 'upvote' ? 'up' : 'down';
 
     try {
-        const { data: existing } = await supabaseClient
-            .from('debate_votes').select('id, vote_type')
-            .eq('debate_id', debateId).eq('user_id', currentUser.id).maybeSingle();
+        // Seleccionamos sin pedir 'id' por si la tabla no lo tiene
+        const { data: existingVotes, error: selectError } = await supabaseClient
+            .from('debate_votes').select('vote_type')
+            .eq('debate_id', debateId).eq('user_id', currentUser.id);
+            
+        if (selectError) throw selectError;
+
+        const existing = existingVotes && existingVotes.length > 0 ? existingVotes[0] : null;
 
         if (existing) {
-            if (existing.vote_type === voteType) {
-                await supabaseClient.from('debate_votes').delete().eq('id', existing.id);
+            if (existing.vote_type === dbVoteType) {
+                // Ya tiene este voto, lo quitamos
+                const { error: delError } = await supabaseClient.from('debate_votes').delete()
+                    .eq('debate_id', debateId).eq('user_id', currentUser.id);
+                if (delError) throw delError;
+                    
                 if (voteType === 'upvote') { post.liked = false; post.likes = Math.max(0, post.likes - 1); }
                 else { post.disliked = false; post.dislikes = Math.max(0, post.dislikes - 1); }
             } else {
-                await supabaseClient.from('debate_votes').update({ vote_type: voteType }).eq('id', existing.id);
+                // Cambiar el voto
+                const { error: updError } = await supabaseClient.from('debate_votes').update({ vote_type: dbVoteType })
+                    .eq('debate_id', debateId).eq('user_id', currentUser.id);
+                if (updError) throw updError;
+                    
                 if (voteType === 'upvote') { post.liked = true; post.disliked = false; post.likes++; post.dislikes = Math.max(0, post.dislikes - 1); }
                 else { post.disliked = true; post.liked = false; post.dislikes++; post.likes = Math.max(0, post.likes - 1); }
             }
         } else {
-            await supabaseClient.from('debate_votes').insert([{ debate_id: debateId, user_id: currentUser.id, vote_type: voteType }]);
+            // Nuevo voto
+            const { error: insError } = await supabaseClient.from('debate_votes').insert([{ debate_id: debateId, user_id: currentUser.id, vote_type: dbVoteType }]);
+            if (insError) throw insError;
+            
             if (voteType === 'upvote') { post.liked = true; post.likes++; }
             else { post.disliked = true; post.dislikes++; }
         }
 
         // Actualizar contadores en BD
-        await supabaseClient.from('debates')
+        const { error: updateError } = await supabaseClient.from('debates')
             .update({ upvotes_count: post.likes, downvotes_count: post.dislikes })
             .eq('id', debateId);
+        if (updateError) throw updateError;
 
         renderPosts();
     } catch (err) {
         console.error('Error votando:', err);
-        showNotification('Error al registrar voto', 'error');
+        showNotification('Error al registrar voto: ' + err.message, 'error');
+        // Revertir UI state is handled effectively by just reloading from DB or ignoring
+    } finally {
+        post.isVoting = false;
+    }
+}
+
+// ===== VOTAR REACCIÓN EN ENCUESTA =====
+async function votePollReaction(pollId, reactionType) {
+    if (!currentUser) return;
+    const post = posts.find(p => p.type === 'poll' && p.id === pollId);
+    if (!post) return;
+    
+    if (post.isReacting) return;
+    post.isReacting = true;
+    
+    // Actualización optimista de UI
+    const prevReaction = post.userReaction;
+    post.reactions = post.reactions || {};
+    
+    if (prevReaction === reactionType) {
+        post.userReaction = null;
+        if (post.reactions[reactionType]) post.reactions[reactionType]--;
+    } else {
+        if (prevReaction && post.reactions[prevReaction]) {
+            post.reactions[prevReaction]--;
+        }
+        post.userReaction = reactionType;
+        post.reactions[reactionType] = (post.reactions[reactionType] || 0) + 1;
+    }
+    
+    renderPosts();
+
+    try {
+        const { data: existingReactions } = await supabaseClient
+            .from('poll_reactions').select('id, reaction_type')
+            .eq('poll_id', pollId).eq('user_id', currentUser.id);
+            
+        const existing = existingReactions && existingReactions.length > 0 ? existingReactions[0] : null;
+            
+        if (existing) {
+            if (existing.reaction_type === reactionType) {
+                await supabaseClient.from('poll_reactions').delete().eq('id', existing.id);
+            } else {
+                await supabaseClient.from('poll_reactions').update({ reaction_type: reactionType }).eq('id', existing.id);
+            }
+            
+            if (existingReactions.length > 1) {
+                const dupIds = existingReactions.slice(1).map(r => r.id);
+                await supabaseClient.from('poll_reactions').delete().in('id', dupIds);
+            }
+        } else {
+            await supabaseClient.from('poll_reactions').insert([{ poll_id: pollId, user_id: currentUser.id, reaction_type: reactionType }]);
+        }
+    } catch (err) {
+        console.warn('Error guardando reacción. ¿Existe la tabla poll_reactions?', err);
+    } finally {
+        post.isReacting = false;
     }
 }
 
@@ -715,4 +916,169 @@ function showNotification(message, type = 'info') {
     n.innerHTML = `<div class="notification-content"><span>${message}</span><button class="notification-close" onclick="this.parentElement.parentElement.remove()">&times;</button></div>`;
     document.body.appendChild(n);
     setTimeout(() => n.remove(), 5000);
+}
+
+// ===== POST OPTIONS, CRUD Y REPORTES =====
+
+function togglePostOptions(postId, event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById(`dropdown-${postId}`);
+    if (!dropdown) return;
+    
+    const isShowing = dropdown.classList.contains('show');
+    
+    // Cerrar todos primero
+    document.querySelectorAll('.options-dropdown').forEach(d => d.classList.remove('show'));
+    
+    if (!isShowing) {
+        dropdown.classList.add('show');
+    }
+}
+
+function openEditModal(postId) {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    
+    const postTimeStr = new Date(post.timestamp).getTime();
+    const nowStr = Date.now();
+    const diffMins = Math.floor((nowStr - postTimeStr) / 60000);
+    
+    if (diffMins >= 10) {
+        showNotification('El tiempo de gracia de 10 minutos para editar ha expirado.', 'error');
+        return;
+    }
+    
+    document.getElementById('editPostId').value = post.id;
+    document.getElementById('editPostTitle').value = post.title;
+    document.getElementById('editPostContent').value = post.content || '';
+    document.getElementById('editPostTags').value = (post.tags || []).join(', ');
+    
+    openModal('editPostModal');
+}
+
+async function submitEditPost(e) {
+    e.preventDefault();
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Guardando...';
+    
+    const postId = document.getElementById('editPostId').value;
+    const title = document.getElementById('editPostTitle').value;
+    const content = document.getElementById('editPostContent').value;
+    const tagsInput = document.getElementById('editPostTags').value;
+    const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
+    
+    try {
+        const { error } = await supabaseClient
+            .from('debates')
+            .update({ title, content, tags, updated_at: new Date().toISOString() })
+            .eq('id', postId)
+            .eq('user_id', currentUser.id);
+            
+        if (error) throw error;
+        
+        showNotification('Publicación actualizada correctamente', 'success');
+        closeModal('editPostModal');
+        await loadPostsFromDB();
+    } catch (error) {
+        console.error('Error al editar:', error);
+        showNotification('Error al editar la publicación: ' + error.message, 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Guardar Cambios';
+    }
+}
+
+function confirmDeletePost(postId) {
+    document.getElementById('deletePostId').value = postId;
+    openModal('confirmDeleteModal');
+}
+
+async function submitDeletePost() {
+    const postId = document.getElementById('deletePostId').value;
+    if (!postId) return;
+    
+    const submitBtn = document.querySelector('#confirmDeleteModal .btn-danger');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Eliminando...';
+    
+    try {
+        // Borramos físicamente el post
+        const { error } = await supabaseClient
+            .from('debates')
+            .delete()
+            .eq('id', postId)
+            .eq('user_id', currentUser.id);
+            
+        if (error) throw error;
+        
+        showNotification('Publicación eliminada correctamente', 'success');
+        closeModal('confirmDeleteModal');
+        
+        // Remove from local state
+        posts = posts.filter(p => p.id !== postId);
+        renderPosts();
+    } catch (error) {
+        console.error('Error eliminando:', error);
+        showNotification('Error al eliminar: ' + error.message, 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Eliminar Definitivamente';
+    }
+}
+
+function openReportModal(postId) {
+    document.getElementById('reportPostId').value = postId;
+    document.getElementById('reportPostForm').reset();
+    openModal('reportPostModal');
+}
+
+async function submitReportPost(e) {
+    e.preventDefault();
+    if (!currentUser) return;
+    
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Enviando...';
+    
+    const postId = document.getElementById('reportPostId').value;
+    const reason = document.querySelector('input[name="reason"]:checked').value;
+    
+    try {
+        // Intentar insertar reporte (el UNIQUE evitará dobles reportes)
+        const { error: insertError } = await supabaseClient
+            .from('post_reports')
+            .insert([{ post_id: postId, user_id: currentUser.id, reason: reason }]);
+            
+        if (insertError) {
+            if (insertError.code === '23505') { // Código de PostgreSQL para unique_violation
+                throw new Error("Ya has reportado esta publicación anteriormente.");
+            }
+            throw insertError;
+        }
+        
+        showNotification('Denuncia enviada correctamente. Gracias por ayudar a mantener la comunidad segura.', 'success');
+        closeModal('reportPostModal');
+        
+        // Verificar cuántos reportes tiene ahora para la auto-eliminación
+        const { count, error: countError } = await supabaseClient
+            .from('post_reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', postId);
+            
+        if (!countError && count >= 10) {
+            console.log(`El post ${postId} alcanzó 10 reportes. Eliminando automáticamente.`);
+            // Eliminar post automáticamente si alcanza 10 reportes
+            await supabaseClient.from('debates').delete().eq('id', postId);
+            posts = posts.filter(p => p.id !== postId);
+            renderPosts();
+        }
+        
+    } catch (error) {
+        console.error('Error al denunciar:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enviar Denuncia';
+    }
 }

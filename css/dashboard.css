@@ -697,6 +697,61 @@ body {
   stroke-width: 2;
 }
 
+/* ===== REACCIONES FACEBOOK STYLE ===== */
+.reaction-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.reaction-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 2rem;
+  padding: 0.35rem 0.6rem;
+  display: flex;
+  gap: 0.5rem;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 100;
+  margin-bottom: 5px;
+}
+
+.reaction-container:hover .reaction-picker {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.reaction-emoji {
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  user-select: none;
+}
+
+.reaction-emoji:hover {
+  transform: scale(1.3) translateY(-3px);
+}
+
+.reaction-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 0.1rem 0.4rem;
+  border-radius: 1rem;
+}
+
 .load-more {
   padding: var(--spacing-lg);
   text-align: center;
@@ -1090,4 +1145,131 @@ body {
   fill: none;
   stroke-width: 1.5;
   margin-bottom: 1rem;
+}
+
+/* ===== POST OPTIONS (3 Puntos) ===== */
+.post-options {
+  position: relative;
+  margin-left: 0.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.post-options-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.post-options-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.options-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  min-width: 150px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-5px);
+  transition: all 0.2s ease;
+}
+
+.options-dropdown.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.dropdown-item {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  padding: 8px 16px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.dropdown-item.danger {
+  color: var(--danger);
+}
+
+.dropdown-item.danger:hover {
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.edit-timer {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: block;
+  text-align: right;
+  margin-top: 4px;
+}
+
+/* ===== REPORT OPTIONS ===== */
+.report-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.report-option {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.8rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.report-option:hover {
+  border-color: var(--border-medium);
+  background: var(--bg-hover);
+}
+
+.report-option input[type="radio"] {
+  accent-color: var(--primary);
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.badge-review {
+  display: inline-block;
+  background: rgba(245, 166, 35, 0.15);
+  color: #f5a623;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 8px;
+  vertical-align: middle;
 }
