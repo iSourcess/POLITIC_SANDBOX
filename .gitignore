@@ -1,0 +1,18 @@
+# Variables de entorno y secretos locales
+.env
+.env.*
+!.env.example
+
+# Base de datos local
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# Archivos generados por Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos locales de desarrollo
+uploads/
+logs/
