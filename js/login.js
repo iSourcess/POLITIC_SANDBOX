@@ -531,7 +531,7 @@ async function sendPasswordReset(email) {
     if (sendBtn) sendBtn.textContent = 'Enviando...';
 
     const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/reset-password.html'
+    redirectTo: 'https://politic-sandbox.vercel.app/reset-password.html'
     });
 
     hideLoading();
