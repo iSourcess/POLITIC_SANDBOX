@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLITIC-SANDBOX — Diario Estudiantil</title>
+    <meta name="description" content="El diario estudiantil de POLITIC-SANDBOX: noticias políticas publicadas y votadas por la comunidad.">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/parties.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo">
+                    <img src="images/logo.svg" alt="POLITIC-SANDBOX Logo" class="logo-img">
+                    <span>POLITIC-SANDBOX</span>
+                </div>
+            </div>
+            <div class="nav-menu">
+                <a href="dashboard.html" class="nav-link">Debates</a>
+                <a href="parties.html" class="nav-link">🏛️ Partidos</a>
+                <a href="motions.html" class="nav-link">⚡ Mociones</a>
+                <a href="news.html" class="nav-link active">📰 Diario</a>
+                <a href="profile.html" class="nav-link">Mi Perfil</a>
+            </div>
+            <div class="nav-actions">
+                <button class="theme-toggle" id="themeToggle">
+                    <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    <svg class="moon-icon" viewBox="0 0 24 24" width="20" height="20"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+                <div class="user-menu">
+                    <div class="user-avatar" id="userAvatarNav">
+                        <img src="https://ui-avatars.com/api/?name=U&background=6366f1&color=fff&size=40" alt="Usuario" id="userAvatar">
+                    </div>
+                    <div class="dropdown-menu" id="userDropdown">
+                        <a href="profile.html">Mi Perfil</a>
+                        <a href="parties.html">🏛️ Mi Partido</a>
+                        <hr>
+                        <a href="#logout" id="logoutLink">Cerrar Sesión</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- Hero -->
+            <section class="news-hero">
+                <div class="news-hero-text">
+                    <h1>📰 Diario Estudiantil</h1>
+                    <p>Noticias publicadas por miembros de partidos, votadas por la comunidad. Las más importantes llegan al frente. Tu voz importa.</p>
+                </div>
+                <button class="btn btn-primary" id="newArticleBtn" onclick="openNewArticleModal()" style="display:none">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                    Publicar Noticia
+                </button>
+            </section>
+
+            <!-- Filtros de área -->
+            <div class="news-filters">
+                <button class="filter-tab active" data-area="all" onclick="filterNews('all', this)">🌐 Todas</button>
+                <button class="filter-tab" data-area="biomedicas" onclick="filterNews('biomedicas', this)">🔬 Biomédicas</button>
+                <button class="filter-tab" data-area="ingenierias" onclick="filterNews('ingenierias', this)">⚙️ Ingenierías</button>
+                <button class="filter-tab" data-area="sociales" onclick="filterNews('sociales', this)">🏛️ Sociales</button>
+            </div>
+
+            <!-- Noticias destacadas (top 3) -->
+            <div id="featuredArticles" class="featured-articles" style="display:none">
+                <h2 class="section-title">🔥 Más Importantes</h2>
+                <div class="featured-grid" id="featuredGrid">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Todas las noticias -->
+            <div class="news-section">
+                <h2 class="section-title">📋 Últimas Noticias</h2>
+                <div id="newsContainer" class="news-container">
+                    <div style="display:flex;justify-content:center;padding:3rem">
+                        <div class="loading-spinner-lg"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Nueva Noticia -->
+    <div class="modal" id="newArticleModal">
+        <div class="modal-content" style="max-width:580px">
+            <div class="modal-header">
+                <h3>📰 Publicar Noticia</h3>
+                <button class="modal-close" onclick="closeModal('newArticleModal')">×</button>
+            </div>
+            <form class="modal-body" id="newArticleForm">
+                <div class="form-group">
+                    <label for="articleTitle">Título de la noticia</label>
+                    <input type="text" id="articleTitle" required placeholder="Titular claro y directo">
+                </div>
+                <div class="form-group">
+                    <label for="articleContent">Contenido</label>
+                    <textarea id="articleContent" rows="7" required placeholder="Desarrolla la noticia con contexto, datos y fuentes si las tienes..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="articleArea">Área relacionada</label>
+                    <select id="articleArea">
+                        <option value="">General (todas las áreas)</option>
+                        <option value="biomedicas">🔬 Biomédicas</option>
+                        <option value="ingenierias">⚙️ Ingenierías</option>
+                        <option value="sociales">🏛️ Sociales</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('newArticleModal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Publicar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Leer artículo completo -->
+    <div class="modal" id="articleModal">
+        <div class="modal-content" style="max-width:680px;max-height:85vh;overflow-y:auto">
+            <div class="modal-header">
+                <h3 id="articleModalTitle">Artículo</h3>
+                <button class="modal-close" onclick="closeModal('articleModal')">×</button>
+            </div>
+            <div id="articleModalBody" class="modal-body">
+                <!-- Se llena dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/news.js"></script>
+</body>
+</html>

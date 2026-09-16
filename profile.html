@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POLITIC-SANDBOX - Mi Perfil</title>
+    <title>POLITIC-SANDBOX - Perfil</title>
+    <meta name="description" content="Perfil de usuario en POLITIC-SANDBOX, la red política estudiantil.">
     <link rel="stylesheet" href="css/dashboard.css">
     <link rel="stylesheet" href="css/profile.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Header Navigation (igual al dashboard) -->
+    <!-- Header Navigation -->
     <header class="header">
         <nav class="navbar">
             <div class="nav-brand">
@@ -21,6 +22,9 @@
 
             <div class="nav-menu">
                 <a href="dashboard.html" class="nav-link">Debates</a>
+                <a href="parties.html" class="nav-link">🏛️ Partidos</a>
+                <a href="motions.html" class="nav-link">⚡ Mociones</a>
+                <a href="news.html" class="nav-link">📰 Diario</a>
                 <a href="profile.html" class="nav-link active">Mi Perfil</a>
             </div>
 
@@ -41,6 +45,7 @@
                     </div>
                     <div class="dropdown-menu" id="userDropdown">
                         <a href="profile.html">Mi Perfil</a>
+                        <a href="parties.html">🏛️ Mi Partido</a>
                         <a href="#configuracion">Configuración</a>
                         <hr>
                         <a href="#logout" id="logoutLink">Cerrar Sesión</a>
@@ -61,7 +66,8 @@
                         <div class="profile-avatar-ring">
                             <img src="https://via.placeholder.com/120" alt="Avatar" id="profileAvatarImg" class="profile-avatar-img">
                         </div>
-                        <label class="avatar-edit-btn" title="Cambiar foto" id="avatarEditBtn">
+                        <!-- Solo visible en perfil propio -->
+                        <label class="avatar-edit-btn" title="Cambiar foto" id="avatarEditBtn" style="display:none">
                             <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             <input type="file" accept="image/*" id="avatarInput" style="display:none">
                         </label>
@@ -70,14 +76,25 @@
                         <div class="profile-name-row">
                             <h1 class="profile-name" id="profileName">Cargando...</h1>
                             <span class="profile-badge" id="profileBadge">Estudiante</span>
+                            <span class="party-badge" id="partyBadge" style="display:none"></span>
                         </div>
-                        <p class="profile-email" id="profileEmail"></p>
+                        <p class="profile-username" id="profileUsername"></p>
                         <p class="profile-bio" id="profileBio">Sin biografía aún.</p>
                     </div>
                     <div class="profile-banner-actions">
-                        <button class="btn btn-primary btn-sm" id="editProfileBtn" onclick="openEditModal()">
+                        <!-- Botón editar — solo en perfil propio -->
+                        <button class="btn btn-primary btn-sm" id="editProfileBtn" style="display:none" onclick="openEditModal()">
                             <svg viewBox="0 0 24 24" width="16" height="16"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             Editar Perfil
+                        </button>
+                        <!-- Botón seguir — solo en perfil ajeno -->
+                        <button class="btn btn-follow btn-sm" id="followBtn" style="display:none" onclick="toggleFollow()">
+                            <svg viewBox="0 0 24 24" width="16" height="16" id="followIcon"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                            <span id="followBtnText">Seguir</span>
+                        </button>
+                        <!-- Botón reclutar — solo si el visitante es líder de partido y el perfil no tiene partido -->
+                        <button class="btn btn-sm btn-outline" id="recruitBtn" style="display:none" onclick="recruitCurrentStudent()">
+                            🏛️ Reclutar al Partido
                         </button>
                     </div>
                 </div>
@@ -99,6 +116,16 @@
                     <span class="pstat-number" id="statLikes">0</span>
                     <span class="pstat-label">Likes recibidos</span>
                 </div>
+                <div class="pstat-divider"></div>
+                <div class="pstat pstat-clickable" onclick="openFollowersModal('followers')">
+                    <span class="pstat-number" id="statFollowers">0</span>
+                    <span class="pstat-label">Seguidores</span>
+                </div>
+                <div class="pstat-divider"></div>
+                <div class="pstat pstat-clickable" onclick="openFollowersModal('following')">
+                    <span class="pstat-number" id="statFollowing">0</span>
+                    <span class="pstat-label">Siguiendo</span>
+                </div>
             </div>
 
             <!-- Cuerpo del perfil -->
@@ -111,7 +138,7 @@
                         <h3>Información</h3>
                         <ul class="info-list">
                             <li>
-                                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.28a16 16 0 0 0 5.61 5.61l.42-.42a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 20.91 16z"/></svg>
+                                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                                 <span id="infoUniversity">Universidad no especificada</span>
                             </li>
                             <li>
@@ -127,6 +154,12 @@
                                 <span id="infoJoinDate">Miembro desde —</span>
                             </li>
                         </ul>
+                    </div>
+
+                    <!-- Partido político -->
+                    <div class="sidebar-section" id="partySection" style="display:none">
+                        <h3>Partido Político</h3>
+                        <div class="party-card-mini" id="partyCardMini"></div>
                     </div>
 
                     <!-- Intereses -->
@@ -148,15 +181,14 @@
 
                 <!-- Feed principal del perfil -->
                 <section class="profile-feed">
-                    <div class="profile-tabs">
-                        <button class="profile-tab active" data-tab="posts">Mis Publicaciones</button>
-                        <button class="profile-tab" data-tab="debates">Mis Debates</button>
-                        <button class="profile-tab" data-tab="polls">Mis Encuestas</button>
-                        <button class="profile-tab" data-tab="liked">Me gusta</button>
+                    <div class="profile-tabs" id="profileTabs">
+                        <button class="profile-tab active" data-tab="posts">Publicaciones</button>
+                        <button class="profile-tab" data-tab="debates">Debates</button>
+                        <button class="profile-tab" data-tab="polls">Encuestas</button>
+                        <button class="profile-tab" data-tab="liked" id="tabLiked">Me gusta</button>
                     </div>
 
                     <div class="profile-tab-content" id="tabContent">
-                        <!-- Se rellena dinámicamente -->
                         <div class="empty-state" id="emptyFeedMsg">
                             <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                             <p>Aún no hay publicaciones aquí.</p>
@@ -167,12 +199,37 @@
         </div>
     </main>
 
+    <!-- Stats Drawer (panel deslizante de estadísticas) -->
+    <div class="stats-drawer-overlay" id="statsDrawerOverlay" onclick="closeStatsDrawer()"></div>
+    <div class="stats-drawer" id="statsDrawer">
+        <div class="stats-drawer-header">
+            <h3>📊 Estadísticas del Post</h3>
+            <button class="stats-drawer-close" onclick="closeStatsDrawer()">×</button>
+        </div>
+        <div class="stats-drawer-body" id="statsDrawerBody">
+            <!-- Se llena dinámicamente -->
+        </div>
+    </div>
+
+    <!-- Modal: Seguidores / Siguiendo -->
+    <div class="modal" id="followersModal">
+        <div class="modal-content" style="max-width:480px">
+            <div class="modal-header">
+                <h3 id="followersModalTitle">Seguidores</h3>
+                <button class="modal-close" onclick="closeModal('followersModal')">×</button>
+            </div>
+            <div class="modal-body" id="followersModalBody" style="max-height:400px;overflow-y:auto;padding:0.5rem 1.5rem">
+                <div class="loading-spinner" style="margin:2rem auto"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Editar Perfil -->
     <div class="modal" id="editProfileModal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Editar Perfil</h3>
-                <button class="modal-close" onclick="closeModal('editProfileModal')">&times;</button>
+                <button class="modal-close" onclick="closeModal('editProfileModal')">×</button>
             </div>
             <form class="modal-body" id="editProfileForm">
                 <div class="form-row">

@@ -595,7 +595,7 @@ function createDebateHTML(post) {
         <div class="post-header" style="position:relative;">
             <img src="${post.avatar}" alt="${post.author}" class="post-avatar">
             <div class="post-meta">
-                <div class="post-author">${post.author}</div>
+                <div class="post-author"><a href="profile.html?id=${post.user_id}" class="author-link" onclick="event.stopPropagation()">${post.author}</a>${post.party_badge ? ` <span class="post-party-badge" style="font-size:0.7rem;padding:0.1rem 0.45rem;border-radius:1rem;background:${post.party_badge.color}22;color:${post.party_badge.color};font-weight:600;vertical-align:middle">${post.party_badge.label}</span>` : ''}</div>
                 <div class="post-time">${getTimeAgo(post.timestamp)}</div>
             </div>
             <span class="post-category ${post.category}">${getCategoryLabel(post.category)}</span>
